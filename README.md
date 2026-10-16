@@ -256,7 +256,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 - Development setup and workflow
 - Coding standards and commit conventions
-- Pull request process
+- Pull request process (merge queue workflow)
 - Testing guidelines
 
 This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold its terms.
