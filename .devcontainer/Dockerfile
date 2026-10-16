@@ -33,6 +33,16 @@ RUN TOFU_VERSION=${TOFU_VERSION:-1.12.6} && \
     install /tmp/tofu/tofu /usr/local/bin/tofu && \
     rm -rf /tmp/tofu.zip /tmp/tofu
 
+# pre-commit in an isolated venv: Debian's system Python is PEP 668
+# externally-managed, so plain `pip install` (used by the upstream
+# pre-commit devcontainer feature) fails on Debian-owned packages.
+RUN apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends python3-venv && \
+    python3 -m venv /opt/pre-commit && \
+    /opt/pre-commit/bin/pip install --no-cache-dir pre-commit && \
+    ln -sf /opt/pre-commit/bin/pre-commit /usr/local/bin/pre-commit && \
+    rm -rf /var/lib/apt/lists/*
+
 # Give vscode user access to Go module cache and Docker socket
 RUN chmod -R g+w /go/pkg/mod && \
     groupadd -g 102 docker 2>/dev/null; \
