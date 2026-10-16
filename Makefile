@@ -214,26 +214,26 @@ print-version:
 # CI controller image build — tag for ghcr.io, load into local daemon (no push)
 ci-controller-image:
 	@SHA=$(IMAGE_TAG); \
-	echo "Building controller image for CI: ghcr.io/nbyl/metio/controller:$${SHA}"; \
-	docker buildx build --platform linux/amd64 -t ghcr.io/nbyl/metio/controller:$${SHA} --build-arg VERSION=$(VERSION) -f cmd/controller/Dockerfile --load .
+	echo "Building controller image for CI: ghcr.io/metio-plattform/metio/controller:$${SHA}"; \
+	docker buildx build --platform linux/amd64 -t ghcr.io/metio-plattform/metio/controller:$${SHA} --build-arg VERSION=$(VERSION) -f cmd/controller/Dockerfile --load .
 
 # CI machine-agent image build — tag for ghcr.io, load into local daemon (no push)
 ci-machine-agent-image:
 	@SHA=$(IMAGE_TAG); \
-	echo "Building machine-agent image for CI: ghcr.io/nbyl/metio/machine-agent:$${SHA}"; \
-	docker buildx build --platform linux/amd64 -t ghcr.io/nbyl/metio/machine-agent:$${SHA} --build-arg VERSION=$(VERSION) -f cmd/machine-agent/Dockerfile --load .
+	echo "Building machine-agent image for CI: ghcr.io/metio-plattform/metio/machine-agent:$${SHA}"; \
+	docker buildx build --platform linux/amd64 -t ghcr.io/metio-plattform/metio/machine-agent:$${SHA} --build-arg VERSION=$(VERSION) -f cmd/machine-agent/Dockerfile --load .
 
 # CI mc-backup image build — tag for ghcr.io, load into local daemon (no push)
 ci-mc-backup-image:
 	@SHA=$(IMAGE_TAG); \
-	echo "Building mc-backup image for CI: ghcr.io/nbyl/metio/mc-backup:$${SHA}"; \
-	docker buildx build --platform linux/amd64 -t ghcr.io/nbyl/metio/mc-backup:$${SHA} -f cmd/mc-backup/Dockerfile --load .
+	echo "Building mc-backup image for CI: ghcr.io/metio-plattform/metio/mc-backup:$${SHA}"; \
+	docker buildx build --platform linux/amd64 -t ghcr.io/metio-plattform/metio/mc-backup:$${SHA} -f cmd/mc-backup/Dockerfile --load .
 
 # CI daprd image build — tag for ghcr.io, load into local daemon (no push)
 ci-daprd-image:
 	@SHA=$(IMAGE_TAG); \
-	echo "Building daprd image for CI: ghcr.io/nbyl/metio/daprd:$${SHA}"; \
-	docker buildx build --platform linux/amd64 -t ghcr.io/nbyl/metio/daprd:$${SHA} -f cmd/daprd/Dockerfile --load .
+	echo "Building daprd image for CI: ghcr.io/metio-plattform/metio/daprd:$${SHA}"; \
+	docker buildx build --platform linux/amd64 -t ghcr.io/metio-plattform/metio/daprd:$${SHA} -f cmd/daprd/Dockerfile --load .
 
 # Local controller image build + push to Artifact Registry
 controller-image:
@@ -273,10 +273,10 @@ daprd-image:
 
 # Push images to ghcr.io
 push-images:
-	docker push ghcr.io/nbyl/metio/controller:$(IMAGE_TAG)
-	docker push ghcr.io/nbyl/metio/machine-agent:$(IMAGE_TAG)
-	docker push ghcr.io/nbyl/metio/mc-backup:$(IMAGE_TAG)
-	docker push ghcr.io/nbyl/metio/daprd:$(IMAGE_TAG)
+	docker push ghcr.io/metio-plattform/metio/controller:$(IMAGE_TAG)
+	docker push ghcr.io/metio-plattform/metio/machine-agent:$(IMAGE_TAG)
+	docker push ghcr.io/metio-plattform/metio/mc-backup:$(IMAGE_TAG)
+	docker push ghcr.io/metio-plattform/metio/daprd:$(IMAGE_TAG)
 
 # Promote image tags (usage: make promote FROM=a1b2c3d4 TO=main)
 promote:
@@ -284,16 +284,16 @@ promote:
 		echo "Usage: make promote FROM=<sha> TO=<tag>"; \
 		exit 1; \
 	fi
-	docker buildx imagetools create --prefer-index=false -t ghcr.io/nbyl/metio/controller:$(TO) ghcr.io/nbyl/metio/controller:$(FROM)
-	docker buildx imagetools create --prefer-index=false -t ghcr.io/nbyl/metio/machine-agent:$(TO) ghcr.io/nbyl/metio/machine-agent:$(FROM)
-	docker buildx imagetools create --prefer-index=false -t ghcr.io/nbyl/metio/mc-backup:$(TO) ghcr.io/nbyl/metio/mc-backup:$(FROM)
-	docker buildx imagetools create --prefer-index=false -t ghcr.io/nbyl/metio/daprd:$(TO) ghcr.io/nbyl/metio/daprd:$(FROM)
+	docker buildx imagetools create --prefer-index=false -t ghcr.io/metio-plattform/metio/controller:$(TO) ghcr.io/metio-plattform/metio/controller:$(FROM)
+	docker buildx imagetools create --prefer-index=false -t ghcr.io/metio-plattform/metio/machine-agent:$(TO) ghcr.io/metio-plattform/metio/machine-agent:$(FROM)
+	docker buildx imagetools create --prefer-index=false -t ghcr.io/metio-plattform/metio/mc-backup:$(TO) ghcr.io/metio-plattform/metio/mc-backup:$(FROM)
+	docker buildx imagetools create --prefer-index=false -t ghcr.io/metio-plattform/metio/daprd:$(TO) ghcr.io/metio-plattform/metio/daprd:$(FROM)
 
 # Promote images from ghcr.io to GCP Artifact Registry (distribution repo)
 DISTRO_REGISTRY ?= europe-docker.pkg.dev/metio-distribution/metio
 promote-distribution:
 	@for img in controller machine-agent mc-backup daprd; do \
-		src="ghcr.io/nbyl/metio/$${img}:$(IMAGE_TAG)"; \
+		src="ghcr.io/metio-plattform/metio/$${img}:$(IMAGE_TAG)"; \
 		tags="-t $(DISTRO_REGISTRY)/$${img}:$(IMAGE_TAG)"; \
 		if [ -n "$(VERSION)" ]; then \
 			tags="$${tags} -t $(DISTRO_REGISTRY)/$${img}:$(VERSION)"; \

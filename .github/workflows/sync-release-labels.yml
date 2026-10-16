@@ -21,7 +21,7 @@ jobs:
           github-token: ${{ secrets.PROJECTS_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
-            const PROJECT_OWNER = "nbyl";
+            const PROJECT_OWNER = "metio-plattform";
             const PROJECT_NUMBER = 7;
             const FIELD_NAME = "Target Release";
 

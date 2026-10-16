@@ -1,7 +1,7 @@
 # Metio - Minecraft Server Control Panel
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![CI](https://github.com/nbyl/metio/actions/workflows/ci.yml/badge.svg)](https://github.com/nbyl/metio/actions)
+[![CI](https://github.com/metio-plattform/metio/actions/workflows/ci.yml/badge.svg)](https://github.com/metio-plattform/metio/actions)
 
 A self-hosted Minecraft server management platform running on Google Cloud Platform. Start, stop, and manage Minecraft servers on-demand through a web interface — pay only for what you use.
 
@@ -30,7 +30,7 @@ Metio provisions Compute Engine VMs on the fly, so your server runs only when pl
 
 ```bash
 # Clone the repository
-git clone https://github.com/nbyl/metio
+git clone https://github.com/metio-plattform/metio
 cd metio
 
 # Deploy the full stack (requires GCP project setup)
@@ -106,7 +106,7 @@ Once deployed, visit your Metio instance, complete the setup wizard, and create 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/nbyl/metio
+   git clone https://github.com/metio-plattform/metio
    cd metio
    ```
 
