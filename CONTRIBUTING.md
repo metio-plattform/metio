@@ -513,7 +513,7 @@ make promote FROM=<sha> TO=main
 
 ### Release rollover
 
-Every issue that is part of an upcoming release carries a `release/<version>` label (e.g. `release/v2.1.0`). A GitHub Actions workflow (`.github/workflows/sync-release-labels.yml`) mirrors that label into the single-select **Target release** field of the [Metio Development project](https://github.com/users/nbyl/projects/7): the option name equals the label name minus the `release/` prefix.
+Every issue that is part of an upcoming release carries a `release/<version>` label (e.g. `release/v2.1.0`). A GitHub Actions workflow (`.github/workflows/sync-release-labels.yml`) mirrors that label into the single-select **Target release** field of the [Metio Development project](https://github.com/orgs/metio-plattform/projects/7): the option name equals the label name minus the `release/` prefix.
 
 - Exactly one `release/*` label sets the field; removing the last one clears it.
 - Two or more `release/*` labels fail the workflow loudly and leave the field untouched.
@@ -540,7 +540,7 @@ After release-please publishes version `X.Y.Z`:
 
 ### Bug Reports
 
-Submit bug reports via [GitHub Issues](https://github.com/nbyl/metio/issues). Include:
+Submit bug reports via [GitHub Issues](https://github.com/metio-plattform/metio/issues). Include:
 
 - Steps to reproduce
 - Expected vs actual behavior
@@ -549,7 +549,7 @@ Submit bug reports via [GitHub Issues](https://github.com/nbyl/metio/issues). In
 
 ### Feature Requests
 
-Open a [GitHub Issue](https://github.com/nbyl/metio/issues/new) with the `enhancement` label. Describe the problem you're solving and any potential implementation ideas.
+Open a [GitHub Issue](https://github.com/metio-plattform/metio/issues/new) with the `enhancement` label. Describe the problem you're solving and any potential implementation ideas.
 
 ### Documentation Improvements
 
@@ -572,4 +572,4 @@ Please note that this project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md)
 
 - **GitHub Issues**: Use for bug reports and feature requests
 - **GitHub Discussions**: For questions, ideas, and community support (coming soon)
-- **Issue search**: Check existing [issues](https://github.com/nbyl/metio/issues) before opening a new one
+- **Issue search**: Check existing [issues](https://github.com/metio-plattform/metio/issues) before opening a new one
