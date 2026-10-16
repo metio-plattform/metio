@@ -510,7 +510,7 @@ Two consequences follow from the settings above:
 
 On every push, pull request, and merge group targeting `main`, GitHub Actions runs (`.github/workflows/ci.yml`):
 
-| Job | Jobs | Trigger |
+| Job | What it runs | Trigger |
 |-----|------|---------|
 | Test | `go test`, `web test`, `lint` | Always |
 | Docker | Build + push to ghcr.io | On `main` merge only |
