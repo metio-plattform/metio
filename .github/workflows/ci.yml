@@ -4,6 +4,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Required status checks must also report for merge groups, otherwise
+  # every PR queued in the merge queue hangs in AWAITING_CHECKS (#600).
+  merge_group:
+    types: [checks_requested]
+    branches: [main]
 
 jobs:
   test:
