@@ -67,7 +67,7 @@ generate-env:
 OPENCODE_PORT ?= 4096
 OPENCODE_SERVER_PASSWORD ?= zDIHhso9NumzzA7Y5wxuei2P
 opencode-web:
-	OPENCODE_SERVER_PASSWORD="$(OPENCODE_SERVER_PASSWORD)" opencode web --port $(OPENCODE_PORT) --hostname 0.0.0.0
+	OPENCODE_SERVER_PASSWORD="$(OPENCODE_SERVER_PASSWORD)" opencode serve --port $(OPENCODE_PORT) --hostname 0.0.0.0
 
 # Start backend (air) and frontend (Vite) with hot reload.
 # Dapr sidecar + local Postgres are always started (and torn down on exit).
