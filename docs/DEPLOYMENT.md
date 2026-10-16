@@ -54,7 +54,7 @@ gcloud services enable \
 
 ### GitHub Container Registry
 
-Images are published to `ghcr.io/nbyl/metio`. Ensure you are authenticated:
+Images are published to `ghcr.io/metio-plattform/metio`. Ensure you are authenticated:
 
 ```bash
 echo $GITHUB_TOKEN | docker login ghcr.io -u <your-username> --password-stdin
@@ -186,7 +186,7 @@ You can include the Metio infrastructure module in your own OpenTofu configurati
 
 ```hcl
 module "metio" {
-  source = "github.com/nbyl/metio//deploy/modules/gcp-cloud-run"
+  source = "github.com/metio-plattform/metio//deploy/modules/gcp-cloud-run"
 
   project_id          = var.project_id
   region              = var.region
@@ -246,8 +246,8 @@ Alternatively, build and push a specific tag:
 ```bash
 docker buildx build --platform linux/amd64 \
   -f cmd/controller/Dockerfile \
-  -t ghcr.io/nbyl/metio/controller:<tag> .
-docker push ghcr.io/nbyl/metio/controller:<tag>
+  -t ghcr.io/metio-plattform/metio/controller:<tag> .
+docker push ghcr.io/metio-plattform/metio/controller:<tag>
 ```
 
 Deploy the image to Cloud Run:
@@ -588,7 +588,7 @@ to new/updated servers.
 Metio includes GitHub Actions CI/CD (`.github/workflows/ci.yml`) for automated builds:
 
 1. The workflow runs tests (Go + frontend) on every push and PR to `main`
-2. On `main` merges, it builds and pushes Docker images to `ghcr.io/nbyl/metio`
+2. On `main` merges, it builds and pushes Docker images to `ghcr.io/metio-plattform/metio`
 3. Images are tagged with the git SHA
 4. Use `make promote FROM=<sha> TO=main` to retag images for deployment
 
