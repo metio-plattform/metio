@@ -11,7 +11,7 @@ RUN DAPR_VERSION=1.16.5 && \
     install /tmp/dapr /usr/local/bin/dapr && \
     rm -f /tmp/dapr.tar.gz /tmp/dapr
 
-RUN curl -fsSL https://opencode.ai/install | VERSION=1.18.27 bash && \
+RUN curl -fsSL https://opencode.ai/v2/install | VERSION=2.0.29 bash && \
     cp /root/.opencode/bin/opencode /usr/local/bin/opencode && \
     chmod 755 /usr/local/bin/opencode
 
