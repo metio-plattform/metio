@@ -532,7 +532,7 @@ make promote FROM=<sha> TO=main
 
 ### Release rollover
 
-Every issue that is part of an upcoming release carries a `release/<version>` label (e.g. `release/v2.1.0`). A GitHub Actions workflow (`.github/workflows/sync-release-labels.yml`) mirrors that label into the single-select **Target release** field of the [Metio Development project](https://github.com/orgs/metio-plattform/projects/7): the option name equals the label name minus the `release/` prefix.
+Every issue that is part of an upcoming release carries a `release/<version>` label (e.g. `release/v2.1.0`). A GitHub Actions workflow (`.github/workflows/sync-release-labels.yml`) mirrors that label into the single-select **Target release** field of the [Metio Development project](https://github.com/orgs/metio-plattform/projects/1): the option name equals the label name minus the `release/` prefix.
 
 - Exactly one `release/*` label sets the field; removing the last one clears it.
 - Two or more `release/*` labels fail the workflow loudly and leave the field untouched.

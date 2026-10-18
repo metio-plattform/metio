@@ -22,7 +22,7 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const PROJECT_OWNER = "metio-plattform";
-            const PROJECT_NUMBER = 7;
+            const PROJECT_NUMBER = 1;
             const FIELD_NAME = "Target Release";
 
             const issue = context.payload.issue;
@@ -38,7 +38,7 @@ jobs:
 
             const projectQ = `
               query($login: String!, $number: Int!) {
-                user(login: $login) {
+                organization(login: $login) {
                   projectV2(number: $number) {
                     id
                     items(first: 100) {
