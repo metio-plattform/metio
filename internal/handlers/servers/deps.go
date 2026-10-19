@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/nbyl/metio/internal/config"
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/services"
+	"github.com/metio-plattform/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/services"
 )
 
 var GetDBConnection func(ctx context.Context) (db.DB, config.Config, error)

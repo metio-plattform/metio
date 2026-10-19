@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
-	"github.com/nbyl/metio/internal/agentclient"
-	"github.com/nbyl/metio/internal/dbtypes"
-	"github.com/nbyl/metio/internal/tracing"
+	"github.com/metio-plattform/metio/internal/agentclient"
+	"github.com/metio-plattform/metio/internal/dbtypes"
+	"github.com/metio-plattform/metio/internal/tracing"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"

@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/nbyl/metio/internal/services"
+	"github.com/metio-plattform/metio/internal/services"
 	"github.com/stretchr/testify/assert"
 )
 

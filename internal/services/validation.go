@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/nbyl/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/config"
 )
 
 var requiredAPIs = []string{

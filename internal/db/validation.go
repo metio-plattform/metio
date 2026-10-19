@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/nbyl/metio/internal/dbtypes"
+	"github.com/metio-plattform/metio/internal/dbtypes"
 )
 
 var (

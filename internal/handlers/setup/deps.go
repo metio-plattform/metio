@@ -3,7 +3,7 @@ package setup
 import (
 	"context"
 
-	"github.com/nbyl/metio/internal/services"
+	"github.com/metio-plattform/metio/internal/services"
 )
 
 type ValidationServiceInterface interface {

@@ -8,8 +8,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/nbyl/metio/internal/config"
-	"github.com/nbyl/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/db"
 )
 
 var GetDBConnection func(ctx context.Context) (db.DB, config.Config, error)

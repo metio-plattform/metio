@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nbyl/metio/internal/config"
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/pulumi"
-	"github.com/nbyl/metio/internal/pulumi/programs"
+	"github.com/metio-plattform/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/pulumi"
+	"github.com/metio-plattform/metio/internal/pulumi/programs"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 )
 

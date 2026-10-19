@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/nbyl/metio/internal/dbtypes"
+	"github.com/metio-plattform/metio/internal/dbtypes"
 )
 
 type AgentClient interface {

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nbyl/metio/internal/agentclient"
-	"github.com/nbyl/metio/internal/dbtypes"
+	"github.com/metio-plattform/metio/internal/agentclient"
+	"github.com/metio-plattform/metio/internal/dbtypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nbyl/metio/internal/backupmanifest"
+	"github.com/metio-plattform/metio/internal/backupmanifest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

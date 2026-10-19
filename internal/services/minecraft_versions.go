@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nbyl/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/db"
 )
 
 const (
