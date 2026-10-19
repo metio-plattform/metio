@@ -6,12 +6,12 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/nbyl/metio/internal/config"
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/handlers/agent"
-	"github.com/nbyl/metio/internal/handlers/servers"
-	"github.com/nbyl/metio/internal/pulumi/programs"
-	"github.com/nbyl/metio/internal/services"
+	"github.com/metio-plattform/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/handlers/agent"
+	"github.com/metio-plattform/metio/internal/handlers/servers"
+	"github.com/metio-plattform/metio/internal/pulumi/programs"
+	"github.com/metio-plattform/metio/internal/services"
 )
 
 var ProvisioningService *services.ProvisioningService

@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/handlers/agent"
-	"github.com/nbyl/metio/internal/pulumi/programs"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/handlers/agent"
+	"github.com/metio-plattform/metio/internal/pulumi/programs"
 )
 
 type reportRequest struct {

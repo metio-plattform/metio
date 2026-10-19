@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/nbyl/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/db"
 	"github.com/stretchr/testify/mock"
 )
 

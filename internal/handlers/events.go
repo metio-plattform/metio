@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/tracing"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/tracing"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )

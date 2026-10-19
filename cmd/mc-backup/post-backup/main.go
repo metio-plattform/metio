@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nbyl/metio/internal/backupmanifest"
+	"github.com/metio-plattform/metio/internal/backupmanifest"
 )
 
 const (

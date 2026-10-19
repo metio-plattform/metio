@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-module github.com/nbyl/metio
+module github.com/metio-plattform/metio
 
 go 1.26.6
 

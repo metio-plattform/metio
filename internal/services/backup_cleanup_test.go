@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/testutil"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

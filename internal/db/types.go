@@ -1,6 +1,6 @@
 package db
 
-import "github.com/nbyl/metio/internal/dbtypes"
+import "github.com/metio-plattform/metio/internal/dbtypes"
 
 type ServerState = dbtypes.ServerState
 
