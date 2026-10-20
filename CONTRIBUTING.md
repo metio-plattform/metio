@@ -90,7 +90,7 @@ is seeded automatically from `devcontainer.env.example`.
 
 **Limitations in Codespaces:**
 - The seeded env file contains `TBD` placeholders for `GCP_PROJECT`, `GCP_ZONE`,
-  `INSTANCE_NAME`, `ALLOWED_USERS`, and the Google OAuth credentials. Building,
+ `ALLOWED_USERS`, and the Google OAuth credentials. Building,
   running the Go and frontend test suites, and the Vite dev server all work; Google
   OAuth login and anything touching GCP (Datastore, Compute Engine, `make deploy`)
   does not until you supply real values.

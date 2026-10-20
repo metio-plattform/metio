@@ -203,7 +203,6 @@ This serves the pre-built frontend from `static/dist/`. Run `cd web && npm run b
 | `GCP_PROJECT` | Yes | GCP project ID |
 | `GCP_ZONE` | Yes | GCP zone (e.g., `europe-west3-a`) |
 | `REGION` | Yes | GCP region (e.g., `europe-west3`) |
-| `INSTANCE_NAME` | Yes | Compute Engine instance name |
 | `ENVIRONMENT` | Yes | Environment name (`development`/`production`) |
 | `SESSION_KEY` | Yes | Secret key for session cookies |
 | `BASE_URL` | Yes | Application base URL for OAuth redirects |
