@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/devcontainers/go:2-1.26
+FROM mcr.microsoft.com/devcontainers/go:2-1.27
 
 RUN for i in 1 2 3; do \
         go install github.com/air-verse/air@v1.62.0 && break || sleep 5; \
