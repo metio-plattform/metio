@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { UpdateModal } from './UpdateModal';
 import type { ServerConfig } from '../../types/server';
 import {
@@ -8,6 +9,9 @@ import {
   useUpdateBackupSettings,
 } from '../../hooks/useBackupSettings';
 import { useServerOptions } from '../../hooks/useServerOptions';
+import { useModrinthPack } from '../../hooks/useModrinthPack';
+import { useModrinthPackVersions } from '../../hooks/useModrinthPackVersions';
+import { useModrinthSearch } from '../../hooks/useModrinthSearch';
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
@@ -20,6 +24,19 @@ vi.mock('../../hooks/useServerOptions', () => ({
 vi.mock('../../hooks/useBackupSettings', () => ({
   useBackupSettings: vi.fn(),
   useUpdateBackupSettings: vi.fn(),
+}));
+
+vi.mock('../../hooks/useModrinthPack', () => ({
+  useModrinthPack: vi.fn(),
+}));
+
+vi.mock('../../hooks/useModrinthPackVersions', () => ({
+  useModrinthPackVersions: vi.fn(),
+}));
+
+// The picker searches through this hook; tests provide results directly.
+vi.mock('../../hooks/useModrinthSearch', () => ({
+  useModrinthSearch: vi.fn(),
 }));
 
 const config: ServerConfig = {
@@ -40,19 +57,25 @@ function renderModal(
   configOverrides: Partial<ServerConfig> = {},
   handlerOverrides: Partial<Parameters<typeof UpdateModal>[0]> = {}
 ) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+  });
+
   return render(
-    <UpdateModal
-      open
-      serverId="srv1"
-      serverName="test-server"
-      config={{ ...config, ...configOverrides }}
-      currentInfraVersion={1}
-      outdated={false}
-      onClose={vi.fn()}
-      onUpdate={vi.fn()}
-      isPending={false}
-      {...handlerOverrides}
-    />
+    <QueryClientProvider client={queryClient}>
+      <UpdateModal
+        open
+        serverId="srv1"
+        serverName="test-server"
+        config={{ ...config, ...configOverrides }}
+        currentInfraVersion={1}
+        outdated={false}
+        onClose={vi.fn()}
+        onUpdate={vi.fn()}
+        isPending={false}
+        {...handlerOverrides}
+      />
+    </QueryClientProvider>
   );
 }
 
@@ -81,6 +104,23 @@ beforeEach(() => {
   vi.mocked(useUpdateBackupSettings).mockReturnValue({
     mutate: vi.fn(),
     isPending: false,
+  } as never);
+  vi.mocked(useModrinthPack).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+  } as never);
+  vi.mocked(useModrinthPackVersions).mockReturnValue({
+    data: [],
+    isLoading: false,
+    isError: false,
+  } as never);
+  vi.mocked(useModrinthSearch).mockReturnValue({
+    data: [],
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+    debouncedQuery: '',
   } as never);
 });
 
@@ -253,5 +293,320 @@ describe('UpdateModal tabs and submit behavior', () => {
     renderModal({}, { outdated: true, onUpdate });
     await user.click(screen.getByRole('button', { name: 'Update Server' }));
     expect(onUpdate).toHaveBeenCalledWith({});
+  });
+});
+
+const installedPack = { platform: 'modrinth', projectId: 'sodium-pack' };
+
+const sodiumPack = {
+  id: 'sodium-pack',
+  slug: 'sodium',
+  name: 'Sodium Optimized',
+  author: 'jellysquid',
+  iconUrl: 'https://cdn.modrinth.com/sodium.png',
+  downloads: 1_500_000,
+  gameVersions: ['1.21.11'],
+  loader: 'fabric',
+};
+
+const sodiumVersions = [
+  {
+    id: 'ver-2',
+    name: 'Sodium 2.0',
+    versionNumber: '2.0.0',
+    gameVersions: ['1.21.11'],
+    loaders: ['fabric'],
+    latest: true,
+  },
+  {
+    id: 'ver-1',
+    name: 'Sodium 1.0',
+    versionNumber: '1.0.0',
+    gameVersions: ['1.21.10'],
+    loaders: ['fabric'],
+    latest: false,
+  },
+];
+
+function mockPackDetails({
+  pack = sodiumPack,
+  versions = sodiumVersions,
+}: {
+  pack?: typeof sodiumPack;
+  versions?: typeof sodiumVersions;
+} = {}) {
+  vi.mocked(useModrinthPack).mockReturnValue({
+    data: pack,
+    isLoading: false,
+    isError: false,
+  } as never);
+  vi.mocked(useModrinthPackVersions).mockReturnValue({
+    data: versions,
+    isLoading: false,
+    isError: false,
+  } as never);
+}
+
+function mockPackSearch(
+  data: (typeof sodiumPack)[] = [sodiumPack],
+  debouncedQuery = 'sodium'
+) {
+  vi.mocked(useModrinthSearch).mockReturnValue({
+    data,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+    debouncedQuery,
+  } as never);
+}
+
+async function openModpackTab(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('tab', { name: 'Modpack' }));
+}
+
+describe('UpdateModal modpack tab', () => {
+  it('is offered alongside settings and backup', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await openModpackTab(user);
+
+    expect(screen.getByRole('tab', { name: 'Modpack' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByText('Vanilla Minecraft')).toBeInTheDocument();
+  });
+
+  it('shows the installed pack and its version', async () => {
+    const user = userEvent.setup();
+    mockPackDetails();
+    renderModal({ modpack: installedPack, minecraftVersion: '' });
+
+    await openModpackTab(user);
+
+    expect(screen.getByText('Sodium Optimized')).toBeInTheDocument();
+    expect(screen.getByText(/Installed version: Latest/)).toBeInTheDocument();
+  });
+
+  it('resolves the installed version when one is pinned', async () => {
+    const user = userEvent.setup();
+    mockPackDetails();
+    renderModal({
+      modpack: { ...installedPack, versionId: 'ver-2' },
+      minecraftVersion: '',
+    });
+
+    await openModpackTab(user);
+
+    expect(
+      screen.getByText(/Installed version: Sodium 2\.0/)
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to the project id when the catalogue cannot resolve the pack', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useModrinthPack).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    } as never);
+    renderModal({ modpack: installedPack, minecraftVersion: '' });
+
+    await openModpackTab(user);
+
+    expect(screen.getByText('sodium-pack')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Could not load the pack's details/)
+    ).toBeInTheDocument();
+  });
+
+  it('hides the Minecraft version field on pack-driven servers', () => {
+    renderModal({ modpack: installedPack, minecraftVersion: '' });
+
+    expect(
+      screen.queryByRole('combobox', { name: 'Minecraft Version' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Controlled by modpack')).toBeInTheDocument();
+  });
+
+  it('confirms before adding a pack and submits it on confirm', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    mockPackSearch();
+    renderModal({}, { onUpdate });
+
+    await openModpackTab(user);
+    await user.type(screen.getByLabelText('Search Modpacks'), 'sodium');
+    await user.click(
+      await screen.findByRole('button', { name: /Sodium Optimized/ })
+    );
+    await user.click(screen.getByRole('button', { name: 'Update Server' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(
+      screen.getByText('Rebuild server to change the modpack')
+    ).toBeInTheDocument();
+    expect(dialog).toHaveTextContent('Vanilla → Sodium Optimized (Latest)');
+    expect(dialog).toHaveTextContent(/persistent data disk and are kept/);
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Rebuild server' }));
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      modpack: { platform: 'modrinth', projectId: 'sodium-pack' },
+    });
+  });
+
+  it('cancels the rebuild without submitting', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    mockPackSearch();
+    renderModal({}, { onUpdate });
+
+    await openModpackTab(user);
+    await user.type(screen.getByLabelText('Search Modpacks'), 'sodium');
+    await user.click(
+      await screen.findByRole('button', { name: /Sodium Optimized/ })
+    );
+    await user.click(screen.getByRole('button', { name: 'Update Server' }));
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('confirms before changing the version of the installed pack', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    mockPackDetails();
+    renderModal({ modpack: installedPack, minecraftVersion: '' }, { onUpdate });
+
+    await openModpackTab(user);
+    await chooseOption(user, 'Pack Version', 'Sodium 1.0');
+    await user.click(screen.getByRole('button', { name: 'Update Server' }));
+    await user.click(
+      await screen.findByRole('button', { name: 'Rebuild server' })
+    );
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      modpack: {
+        platform: 'modrinth',
+        projectId: 'sodium-pack',
+        versionId: 'ver-1',
+      },
+    });
+  });
+
+  it('confirms before changing to a different pack', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    mockPackDetails();
+    mockPackSearch([
+      sodiumPack,
+      {
+        id: 'other-pack',
+        slug: 'other',
+        name: 'Other Pack',
+        author: 'someone',
+        iconUrl: '',
+        downloads: 10,
+        gameVersions: ['1.21.11'],
+        loader: 'fabric',
+      },
+    ]);
+    renderModal({ modpack: installedPack, minecraftVersion: '' }, { onUpdate });
+
+    await openModpackTab(user);
+    await user.click(screen.getByRole('button', { name: 'Change pack' }));
+    await user.type(screen.getByLabelText('Search Modpacks'), 'sodium');
+    await user.click(await screen.findByRole('button', { name: /Other Pack/ }));
+    await user.click(screen.getByRole('button', { name: 'Update Server' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent(
+      'Sodium Optimized (Latest) → Other Pack (Latest)'
+    );
+    expect(onUpdate).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Rebuild server' }));
+    expect(onUpdate).toHaveBeenCalledWith({
+      modpack: { platform: 'modrinth', projectId: 'other-pack' },
+    });
+  });
+
+  it('requires a Minecraft version before removing the pack and submits both', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    mockPackDetails();
+    renderModal({ modpack: installedPack, minecraftVersion: '' }, { onUpdate });
+
+    await openModpackTab(user);
+    await user.click(screen.getByRole('button', { name: 'Remove pack' }));
+
+    expect(
+      screen.getByText(/turns this into a vanilla server/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: 'Minecraft Version' })
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Update Server' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent(
+      'Sodium Optimized (Latest) → Vanilla (26.2)'
+    );
+    await user.click(screen.getByRole('button', { name: 'Rebuild server' }));
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      modpack: null,
+      minecraftVersion: '26.2',
+    });
+  });
+
+  it('abandons a staged removal when the pack is kept', async () => {
+    const user = userEvent.setup();
+    mockPackDetails();
+    renderModal({ modpack: installedPack, minecraftVersion: '' });
+
+    await openModpackTab(user);
+    await user.click(screen.getByRole('button', { name: 'Remove pack' }));
+    await user.click(screen.getByRole('button', { name: 'Keep current pack' }));
+
+    expect(screen.getByText(/Installed version: Latest/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/turns this into a vanilla server/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Update Server' })
+    ).toBeDisabled();
+  });
+
+  it('disables pack changes while the server is not running', async () => {
+    const user = userEvent.setup();
+    mockPackDetails();
+    renderModal(
+      { modpack: installedPack, minecraftVersion: '' },
+      { isRunning: false }
+    );
+
+    await openModpackTab(user);
+
+    expect(screen.getByRole('button', { name: 'Change pack' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Remove pack' })).toBeDisabled();
+    expect(screen.getByText(/requires it to be running/)).toBeInTheDocument();
+  });
+
+  it('does not ask for confirmation when the pack is unchanged', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    mockPackDetails();
+    renderModal({ modpack: installedPack, minecraftVersion: '' }, { onUpdate });
+
+    await openModpackTab(user);
+    await user.click(screen.getByRole('button', { name: 'Update Server' }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 });

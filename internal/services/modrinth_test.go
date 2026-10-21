@@ -45,6 +45,20 @@ const searchJSON = `{
   "total_hits": 2
 }`
 
+// projectJSON is a trimmed Modrinth project response for e0oMrxjp.
+const projectJSON = `{
+  "id": "e0oMrxjp",
+  "slug": "skyblock-enhanced",
+  "title": "SkyBlock Enhanced",
+  "project_type": "modpack",
+  "categories": ["adventure", "fabric", "multiplayer", "optimization"],
+  "loaders": ["fabric"],
+  "game_versions": ["1.21.5", "26.2"],
+  "downloads": 1788159,
+  "icon_url": "https://cdn.modrinth.com/data/e0oMrxjp/icon.png",
+  "team": "abc123"
+}`
+
 // versionsJSON is a trimmed Modrinth version response for project e0oMrxjp.
 const versionsJSON = `[
   {
@@ -299,6 +313,50 @@ func TestModrinthService_VersionsFallsBackOnUpstreamError(t *testing.T) {
 	s := newTestModrinthService(srv.URL, time.Hour)
 
 	assert.Equal(t, []ModrinthVersion{}, s.Versions(context.Background(), "e0oMrxjp"))
+}
+
+func TestModrinthService_PackNormalizesProject(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Write([]byte(projectJSON))
+	}))
+	defer srv.Close()
+
+	s := newTestModrinthService(srv.URL, time.Hour)
+	pack, ok := s.Pack(context.Background(), "e0oMrxjp")
+
+	require.True(t, ok)
+	assert.Equal(t, "/project/e0oMrxjp", gotPath)
+	assert.Equal(t, "e0oMrxjp", pack.ID)
+	assert.Equal(t, "skyblock-enhanced", pack.Slug)
+	assert.Equal(t, "SkyBlock Enhanced", pack.Name)
+	assert.Equal(t, "https://cdn.modrinth.com/data/e0oMrxjp/icon.png", pack.IconURL)
+	assert.Equal(t, int64(1788159), pack.Downloads)
+	assert.Equal(t, []string{"1.21.5", "26.2"}, pack.GameVersions)
+	assert.Equal(t, "fabric", pack.Loader, "loader must come from the project's loaders or categories")
+	assert.Empty(t, pack.Author, "Modrinth exposes only a team id on a project, so no author name is available")
+}
+
+func TestModrinthService_PackReportsMissingProject(t *testing.T) {
+	tests := map[string]int{
+		"not found":        http.StatusNotFound,
+		"upstream failure": http.StatusInternalServerError,
+	}
+
+	for name, status := range tests {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			defer srv.Close()
+
+			s := newTestModrinthService(srv.URL, time.Hour)
+			_, ok := s.Pack(context.Background(), "e0oMrxjp")
+
+			assert.False(t, ok)
+		})
+	}
 }
 
 func TestNewModrinthService_UsesModrinthBaseURLAndTimeout(t *testing.T) {

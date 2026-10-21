@@ -35,6 +35,12 @@ func stubListModrinthPackVersions(fn func(ctx context.Context, modpackID string)
 	return func() { ListModrinthPackVersions = orig }
 }
 
+func stubGetModrinthPack(fn func(ctx context.Context, modpackID string) (services.ModrinthPack, bool)) func() {
+	orig := GetModrinthPack
+	GetModrinthPack = fn
+	return func() { GetModrinthPack = orig }
+}
+
 func TestSearchModpacks_PassesQueryAndVersionThrough(t *testing.T) {
 	var gotQuery, gotVersion string
 	restore := stubSearchModrinthPacks(func(ctx context.Context, query, mcVersion string) []services.ModrinthPack {
@@ -143,6 +149,55 @@ func TestListModpackVersions_DegradesWhenServiceEmpty(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "[]", strings.TrimSpace(w.Body.String()))
+}
+
+func TestGetModpack_ReturnsProjectDetails(t *testing.T) {
+	var gotID string
+	restore := stubGetModrinthPack(func(ctx context.Context, modpackID string) (services.ModrinthPack, bool) {
+		gotID = modpackID
+		return services.ModrinthPack{
+			ID:           "e0oMrxjp",
+			Slug:         "skyblock-enhanced",
+			Name:         "SkyBlock Enhanced",
+			IconURL:      "https://cdn.modrinth.com/data/e0oMrxjp/icon.png",
+			Downloads:    1788159,
+			GameVersions: []string{"1.21.5", "26.2"},
+			Loader:       "fabric",
+		}, true
+	})
+	defer restore()
+
+	req := httptest.NewRequest("GET", "/api/modpacks/e0oMrxjp", nil)
+	w := httptest.NewRecorder()
+	newModpackRouter().ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	assert.Equal(t, "e0oMrxjp", gotID)
+
+	var pack services.ModrinthPack
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &pack))
+	assert.Equal(t, "SkyBlock Enhanced", pack.Name)
+	assert.Equal(t, "fabric", pack.Loader)
+}
+
+func TestGetModpack_DegradesToStoredID(t *testing.T) {
+	restore := stubGetModrinthPack(func(ctx context.Context, modpackID string) (services.ModrinthPack, bool) {
+		return services.ModrinthPack{}, false
+	})
+	defer restore()
+
+	req := httptest.NewRequest("GET", "/api/modpacks/e0oMrxjp", nil)
+	w := httptest.NewRecorder()
+	newModpackRouter().ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var pack services.ModrinthPack
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &pack))
+	assert.Equal(t, "e0oMrxjp", pack.ID)
+	assert.Equal(t, "e0oMrxjp", pack.Name, "the id stands in for an unresolvable name")
+	assert.Contains(t, w.Body.String(), `"gameVersions":[]`, "game versions must be an empty array, never null")
 }
 
 func TestIsModpackAvailable_ResolvesThroughPickerSource(t *testing.T) {

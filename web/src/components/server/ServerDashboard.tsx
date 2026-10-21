@@ -752,6 +752,7 @@ function ServerCard({ server }: ServerCardProps) {
           setShowUpdate(false);
         }}
         isPending={updateMutation.isPending}
+        isRunning={isRunning}
       />
       <DestroyModal
         open={showDestroy}

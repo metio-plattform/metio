@@ -23,6 +23,32 @@ func SearchModpacks(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(w, http.StatusOK, packs)
 }
 
+// GetModpack serves GET /api/modpacks/{id}. It answers 200 with the project
+// details so a server's installed pack can be shown by name rather than by its
+// opaque project id. Like search, it never fails the browser: an unreachable
+// Modrinth or an unknown project degrades to the id standing in for the name.
+func GetModpack(w http.ResponseWriter, r *http.Request) {
+	modpackID := mux.Vars(r)["id"]
+
+	pack, ok := GetModrinthPack(r.Context(), modpackID)
+	if !ok {
+		pack = modrinthPackFallback(modpackID)
+	}
+
+	writeJSONResponse(w, http.StatusOK, pack)
+}
+
+// modrinthPackFallback is the degraded project description served when the
+// catalogue cannot resolve a pack: the stored id doubles as its label.
+func modrinthPackFallback(modpackID string) services.ModrinthPack {
+	return services.ModrinthPack{
+		ID:           modpackID,
+		Slug:         modpackID,
+		Name:         modpackID,
+		GameVersions: []string{},
+	}
+}
+
 // ListModpackVersions serves GET /api/modpacks/{id}/versions. It responds 200
 // with the pack's versions as a JSON array, degraded to empty when Modrinth is
 // unreachable.
