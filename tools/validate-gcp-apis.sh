@@ -28,6 +28,7 @@ REQUIRED_APIS=(
   "secretmanager.googleapis.com"
   "run.googleapis.com"
   "cloudscheduler.googleapis.com"
+  "compute.googleapis.com"
 )
 
 MISSING_APIS=()
