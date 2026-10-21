@@ -5,7 +5,7 @@ import (
 	"net/url"
 
 	"github.com/gorilla/mux"
-	"github.com/nbyl/metio/internal/services"
+	"github.com/metio-plattform/metio/internal/services"
 )
 
 // SearchModpacks serves GET /api/modpacks/search. It responds 200 with the

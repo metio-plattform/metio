@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/nbyl/metio/internal/agentclient"
-	"github.com/nbyl/metio/internal/backupmanifest"
+	"github.com/metio-plattform/metio/internal/agentclient"
+	"github.com/metio-plattform/metio/internal/backupmanifest"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )

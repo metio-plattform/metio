@@ -13,7 +13,7 @@ This project is under active development. Only the latest version (latest commit
 
 To report a security vulnerability, please use **GitHub Security Advisories**:
 
-1. Go to https://github.com/nbyl/metio/security/advisories
+1. Go to https://github.com/metio-plattform/metio/security/advisories
 2. Click **"New draft security advisory"**
 3. Fill in the details of the vulnerability
 

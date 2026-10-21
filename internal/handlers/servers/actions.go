@@ -10,9 +10,9 @@ import (
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/gorilla/mux"
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/handlers/agent"
-	"github.com/nbyl/metio/internal/pulumi/programs"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/handlers/agent"
+	"github.com/metio-plattform/metio/internal/pulumi/programs"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )

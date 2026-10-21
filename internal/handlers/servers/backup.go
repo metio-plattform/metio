@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/nbyl/metio/internal/handlers/agent"
+	"github.com/metio-plattform/metio/internal/handlers/agent"
 )
 
 func GetBackupSettingsByID(w http.ResponseWriter, r *http.Request) {

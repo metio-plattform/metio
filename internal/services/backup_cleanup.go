@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/nbyl/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/db"
 )
 
 type CleanupResult struct {

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/nbyl/metio/internal/dbtypes"
+	"github.com/metio-plattform/metio/internal/dbtypes"
 	"github.com/stretchr/testify/assert"
 )
 

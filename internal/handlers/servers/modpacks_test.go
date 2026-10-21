@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/mux"
-	"github.com/nbyl/metio/internal/services"
+	"github.com/metio-plattform/metio/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
