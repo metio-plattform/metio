@@ -6,11 +6,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 PROJECT_ID=""
 
-# Try to get project from gcloud config
-if command -v gcloud >/dev/null 2>&1; then
-  PROJECT_ID="$(gcloud config get-value project 2>/dev/null || true)"
-fi
-
 # Try from metio.env
 if [ -z "$PROJECT_ID" ] && [ -f "$REPO_ROOT/metio.env" ]; then
   PROJECT_ID="$(grep -E '^GCP_PROJECT=' "$REPO_ROOT/metio.env" | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -n1)"
