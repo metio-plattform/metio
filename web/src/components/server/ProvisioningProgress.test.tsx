@@ -100,6 +100,37 @@ describe('ProvisioningProgress', () => {
     expect(screen.getByText('Deployment failed')).toBeInTheDocument();
   });
 
+  it('renders the modpack install step of a pack-driven create', () => {
+    vi.mocked(useServerProvisioning).mockReturnValue({
+      data: {
+        ...data,
+        currentStep: 'install_modpack',
+        progress: 67,
+        steps: [
+          ...steps.map((step) => ({ ...step, status: 'COMPLETED' })),
+          {
+            name: 'install_modpack',
+            status: 'IN_PROGRESS',
+            message: 'Installing modpack 1KVo5zza...',
+            timestamp: '2026-01-01T00:00:00Z',
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    } as never);
+
+    renderProgress();
+
+    expect(
+      screen.getByText('Installing modpack 1KVo5zza...')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '67'
+    );
+  });
+
   it('renders the no-provisioning state and navigates home', async () => {
     const user = userEvent.setup();
     vi.mocked(useServerProvisioning).mockReturnValue({

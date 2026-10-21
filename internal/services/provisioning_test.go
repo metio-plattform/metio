@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -333,6 +334,7 @@ func newTestService() (*ProvisioningService, *testutil.MockWorkspaceManager, *Mo
 		backupRetentionDays: 30,
 		restoreAckTimeout:   5 * time.Second,
 		saveAckTimeout:      5 * time.Second,
+		packInstallTimeout:  100 * time.Millisecond,
 	}
 	return svc, mockWM, mockDB
 }
@@ -476,6 +478,221 @@ func TestUpdateServer_Recreate(t *testing.T) {
 	assert.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
+}
+
+// statusRecorder keeps snapshots of every provisioning status the service
+// persists. The service mutates one *db.ProvisioningStatus in place, so the
+// mock's argument list alone cannot show intermediate step states.
+type statusRecorder struct {
+	mu       sync.Mutex
+	statuses []db.ProvisioningStatus
+}
+
+func (r *statusRecorder) record(s *db.ProvisioningStatus) {
+	clone := *s
+	clone.Steps = append([]db.ProvisioningStep(nil), s.Steps...)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.statuses = append(r.statuses, clone)
+}
+
+func (r *statusRecorder) any(match func(db.ProvisioningStatus) bool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, s := range r.statuses {
+		if match(s) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasProvisioningStep reports whether status contains name in the given state.
+func hasProvisioningStep(status db.ProvisioningStatus, name string, state db.ProvisioningState) bool {
+	for _, step := range status.Steps {
+		if step.Name == name && step.Status == state {
+			return true
+		}
+	}
+	return false
+}
+
+// recordProvisioningStatuses stubs UpdateProvisioningStatus and returns a
+// recorder for asserting on the persisted steps.
+func recordProvisioningStatuses(mockDB *MockDB, serverID string) *statusRecorder {
+	recorder := new(statusRecorder)
+	mockDB.On("UpdateProvisioningStatus", mock.Anything, serverID, mock.AnythingOfType("*db.ProvisioningStatus")).
+		Run(func(args mock.Arguments) {
+			recorder.record(args.Get(2).(*db.ProvisioningStatus))
+		}).Return(nil)
+	return recorder
+}
+
+// freshStatus returns a machine-agent status that satisfies the modpack install
+// wait: a running server that answers RCON. The pack in these tests is a
+// Minecraft 1.20.1 pack, which has no `version` command, so the answered player
+// count is what makes it ready. The timestamp must be after the wait's own
+// notBefore, which the mock cannot know, so a future timestamp is used.
+func freshStatus() db.Status {
+	return db.Status{
+		ServerState: "RUNNING",
+		Version:     "Unknown",
+		Players:     dbtypes.Players{Current: 0, Max: 20},
+		Timestamp:   time.Now().Add(time.Hour),
+	}
+}
+
+// prepareCreateMocks sets up the Pulumi workspace and server config mocks used
+// by the create path.
+func prepareCreateMocks(mockWM *testutil.MockWorkspaceManager, mockDB *MockDB, stack *auto.Stack) {
+	mockWM.On("CancelStack", mock.Anything, "srv1").Return(nil)
+	mockWM.On("UpsertStack", mock.Anything, "srv1", mock.AnythingOfType("func(*pulumi.Context) error")).Return(stack, nil)
+	mockWM.On("SetConfig", mock.Anything, stack, "gcp:project", "", false).Return(nil)
+	mockWM.On("ProjectID").Return("")
+	mockWM.On("UpStack", mock.Anything, stack).Return(auto.UpResult{Outputs: auto.OutputMap{}}, nil)
+	mockDB.On("GetServerConfig", mock.Anything, "srv1").Return(&db.ServerConfig{Name: "test"}, nil)
+	mockDB.On("UpdateServerConfig", mock.Anything, "srv1", mock.AnythingOfType("*db.ServerConfig")).Return(nil)
+}
+
+func TestCreateServer_WithModpack_ReportsInstallStep(t *testing.T) {
+	shortenModpackPollInterval(t)
+	svc, mockWM, mockDB := newTestService()
+	recorder := recordProvisioningStatuses(mockDB, "srv1")
+	prepareCreateMocks(mockWM, mockDB, &auto.Stack{})
+	mockDB.On("GetStatus", mock.Anything, "test").Return(freshStatus(), nil)
+
+	err := svc.CreateServer(context.Background(), "srv1", &programs.ServerConfig{
+		Name:    "test",
+		Modpack: &programs.ModpackConfig{Platform: "modrinth", ProjectID: "abC123"},
+	})
+	assert.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	assert.True(t, recorder.any(func(s db.ProvisioningStatus) bool {
+		return hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStateInProgress)
+	}), "expected an in-progress install_modpack step")
+	assert.True(t, recorder.any(func(s db.ProvisioningStatus) bool {
+		return s.State == db.ProvisioningStateCompleted && len(s.Steps) == 3 &&
+			hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStateCompleted)
+	}), "expected a completed operation with a completed install_modpack step")
+}
+
+func TestCreateServer_WithoutModpack_HasNoInstallStep(t *testing.T) {
+	svc, mockWM, mockDB := newTestService()
+	recorder := recordProvisioningStatuses(mockDB, "srv1")
+	prepareCreateMocks(mockWM, mockDB, &auto.Stack{})
+
+	err := svc.CreateServer(context.Background(), "srv1", &programs.ServerConfig{Name: "test"})
+	assert.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	assert.True(t, recorder.any(func(s db.ProvisioningStatus) bool {
+		return s.State == db.ProvisioningStateCompleted && len(s.Steps) == 2
+	}), "expected a completed operation with the two infrastructure steps")
+	assert.False(t, recorder.any(func(s db.ProvisioningStatus) bool {
+		return hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStatePending) ||
+			hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStateInProgress) ||
+			hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStateCompleted)
+	}), "vanilla creates must not declare an install_modpack step")
+	// Vanilla creates must not wait for a modpack install.
+	mockDB.AssertNotCalled(t, "GetStatus", mock.Anything, mock.Anything)
+}
+
+func TestCreateServer_WithModpack_InstallTimeoutIsNotFatal(t *testing.T) {
+	shortenModpackPollInterval(t)
+	svc, mockWM, mockDB := newTestService()
+	svc.packInstallTimeout = 20 * time.Millisecond
+	recorder := recordProvisioningStatuses(mockDB, "srv1")
+	prepareCreateMocks(mockWM, mockDB, &auto.Stack{})
+
+	// The container runs while the pack is still installing: no known version.
+	mockDB.On("GetStatus", mock.Anything, "test").Return(db.Status{
+		ServerState: "RUNNING",
+		Version:     "Unknown",
+		Timestamp:   time.Now().Add(time.Hour),
+	}, nil)
+
+	err := svc.CreateServer(context.Background(), "srv1", &programs.ServerConfig{
+		Name:    "test",
+		Modpack: &programs.ModpackConfig{Platform: "modrinth", ProjectID: "abC123"},
+	})
+	assert.NoError(t, err)
+
+	time.Sleep(300 * time.Millisecond)
+
+	// A slow install must not fail the create.
+	assert.True(t, recorder.any(func(s db.ProvisioningStatus) bool {
+		return s.State == db.ProvisioningStateCompleted &&
+			hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStateCompleted)
+	}), "expected the create to complete despite the install wait timing out")
+}
+
+// prepareRecreateMocks sets up the mocks shared by the recreate path.
+func prepareRecreateMocks(mockWM *testutil.MockWorkspaceManager, mockDB *MockDB, status db.Status) {
+	mockWM.On("CancelStack", mock.Anything, "srv1").Return(nil)
+	mockWM.On("RefreshStack", mock.Anything, "srv1").Return(nil)
+	mockWM.On("UpsertStack", mock.Anything, "srv1", mock.AnythingOfType("func(*pulumi.Context) error")).Return(&auto.Stack{}, nil)
+	mockWM.On("ProjectID").Return("")
+	mockWM.On("SetConfig", mock.Anything, mock.AnythingOfType("*auto.Stack"), "gcp:project", "", false).Return(nil)
+	mockWM.On("UpStack", mock.Anything, mock.AnythingOfType("*auto.Stack")).Return(auto.UpResult{Outputs: auto.OutputMap{}}, nil)
+	mockDB.On("GetStatus", mock.Anything, "test").Return(status, nil)
+	mockDB.On("UpdateStatus", mock.Anything, "test", mock.AnythingOfType("dbtypes.Status")).Return(nil)
+	mockDB.On("GetServerConfig", mock.Anything, "srv1").Return(&db.ServerConfig{Name: "test"}, nil)
+	mockDB.On("UpdateServerConfig", mock.Anything, "srv1", mock.AnythingOfType("*db.ServerConfig")).Return(nil)
+}
+
+func TestUpdateServer_RecreateWithModpack_ReportsInstallStep(t *testing.T) {
+	shortenModpackPollInterval(t)
+	svc, mockWM, mockDB := newTestService()
+	recorder := recordProvisioningStatuses(mockDB, "srv1")
+
+	// The same status satisfies the world-save command ack and the modpack
+	// install wait.
+	recreateStatus := freshStatus()
+	recreateStatus.PendingCommandResult = "completed"
+	prepareRecreateMocks(mockWM, mockDB, recreateStatus)
+
+	err := svc.UpdateServer(context.Background(), "srv1", &programs.ServerConfig{
+		Name:    "test",
+		Modpack: &programs.ModpackConfig{Platform: "modrinth", ProjectID: "abC123"},
+	}, updateTypeRecreate)
+	assert.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	assert.True(t, recorder.any(func(s db.ProvisioningStatus) bool {
+		return hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStateInProgress)
+	}), "expected an in-progress install_modpack step")
+	assert.True(t, recorder.any(func(s db.ProvisioningStatus) bool {
+		return hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStateCompleted)
+	}), "expected a completed install_modpack step")
+}
+
+func TestUpdateServer_RecreateWithoutModpack_HasNoInstallStep(t *testing.T) {
+	shortenModpackPollInterval(t)
+	svc, mockWM, mockDB := newTestService()
+	recorder := recordProvisioningStatuses(mockDB, "srv1")
+
+	// Removing a pack recreates the VM as a plain vanilla server.
+	recreateStatus := db.Status{
+		ServerState:          "RUNNING",
+		PendingCommandResult: "completed",
+	}
+	prepareRecreateMocks(mockWM, mockDB, recreateStatus)
+
+	err := svc.UpdateServer(context.Background(), "srv1", &programs.ServerConfig{Name: "test"}, updateTypeRecreate)
+	assert.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	assert.False(t, recorder.any(func(s db.ProvisioningStatus) bool {
+		return hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStatePending) ||
+			hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStateInProgress) ||
+			hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStateCompleted)
+	}), "pack removals must not declare an install_modpack step")
 }
 
 func TestRevertServerConfig_Success(t *testing.T) {
