@@ -400,6 +400,9 @@ func TestRenderCloudConfig_ModpackLatest(t *testing.T) {
 	result, err := RenderCloudConfig(cfg)
 	assert.NoError(t, err)
 
+	// TYPE=MODRINTH is what makes the image install the pack: with the default
+	// TYPE=VANILLA it would silently boot an unmodded server.
+	assert.Contains(t, result, "-e TYPE=MODRINTH \\")
 	assert.Contains(t, result, "-e MODRINTH_MODPACK=abC123 \\")
 	assert.NotContains(t, result, "MODRINTH_VERSION")
 	assert.NotContains(t, result, "-e VERSION=")
@@ -416,6 +419,7 @@ func TestRenderCloudConfig_ModpackPinned(t *testing.T) {
 	result, err := RenderCloudConfig(cfg)
 	assert.NoError(t, err)
 
+	assert.Contains(t, result, "-e TYPE=MODRINTH \\")
 	assert.Contains(t, result, "-e MODRINTH_MODPACK=abC123 \\")
 	assert.Contains(t, result, "-e MODRINTH_VERSION=XyZ789 \\")
 	assert.NotContains(t, result, "-e VERSION=")
@@ -433,6 +437,7 @@ func TestRenderCloudConfig_VanillaStillRendersVersion(t *testing.T) {
 
 	assert.Contains(t, result, "-e VERSION=1.21.1 \\")
 	assert.NotContains(t, result, "MODRINTH_MODPACK")
+	assert.NotContains(t, result, "TYPE=MODRINTH")
 }
 
 func TestRenderCloudConfig_YAMLValid(t *testing.T) {

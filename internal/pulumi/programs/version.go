@@ -26,4 +26,9 @@ package programs
 // Version 6 adds modpack support (ADR-0006): a pack-driven server passes
 // MODRINTH_MODPACK instead of VERSION, and the Minecraft version becomes
 // pack-controlled. Those servers deploy with an empty minecraftVersion.
-const CurrentInfraVersion = 7
+//
+// Version 8 fixes pack-driven servers that booted unmodded: the Modrinth
+// modpack install requires TYPE=MODRINTH, and setting only MODRINTH_MODPACK
+// left the image's VANILLA default in place. Pack servers built on version 6
+// or 7 must be recreated to pick up the corrected user-data.
+const CurrentInfraVersion = 8
