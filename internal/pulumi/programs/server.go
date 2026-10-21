@@ -270,9 +270,10 @@ func ServerProgram(config *ServerConfig) func(*pulumi.Context) error {
 			"roles/serviceusage.serviceUsageConsumer",
 		}
 
+		var iamMembers []pulumi.Resource
 		for _, role := range iamRoles {
 			roleName := strings.ReplaceAll(role, "roles/", "")
-			_, err = projects.NewIAMMember(ctx, fmt.Sprintf("%s-%s", config.Name, roleName), &projects.IAMMemberArgs{
+			member, err := projects.NewIAMMember(ctx, fmt.Sprintf("%s-%s", config.Name, roleName), &projects.IAMMemberArgs{
 				Project: pulumi.String(config.GCPProject),
 				Role:    pulumi.String(role),
 				Member:  pulumi.Sprintf("serviceAccount:%s", sa.Email),
@@ -280,6 +281,7 @@ func ServerProgram(config *ServerConfig) func(*pulumi.Context) error {
 			if err != nil {
 				return fmt.Errorf("failed to create IAM binding for %s: %w", role, err)
 			}
+			iamMembers = append(iamMembers, member)
 		}
 
 		if config.RetainLegacyBackupBucket {
@@ -440,7 +442,7 @@ func ServerProgram(config *ServerConfig) func(*pulumi.Context) error {
 			Metadata: pulumi.StringMap{
 				"user-data": pulumi.String(userData),
 			},
-		}, pulumi.ReplaceOnChanges([]string{"metadata.user-data"}), pulumi.DeleteBeforeReplace(true), pulumi.DependsOn([]pulumi.Resource{firewall}))
+		}, pulumi.ReplaceOnChanges([]string{"metadata.user-data"}), pulumi.DeleteBeforeReplace(true), pulumi.DependsOn(append([]pulumi.Resource{firewall}, iamMembers...)))
 		if err != nil {
 			return fmt.Errorf("failed to create instance: %w", err)
 		}

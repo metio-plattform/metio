@@ -374,6 +374,7 @@ Some changes trigger different update types:
 - **In-place** (version, RCON password): Updates the server config, machine-agent picks up the change
 - **Resize** (machine type): Stops the VM, changes the machine type, restarts
 - **Recreate** (image changes): Destroys and recreates the VM
+- **Recreate** (infra version bump): Changes to `internal/pulumi/programs/server_cloud_config.yml` bump `CurrentInfraVersion`, which rewrites `metadata.user-data`. Existing VMs are recreated with the new cloud-config; the dashboard shows an **"Update Available"** badge until the action is applied.
 
 ## Operations Guide
 

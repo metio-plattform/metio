@@ -122,6 +122,57 @@ func TestRenderCloudConfig_DiskLayoutAndManifestMount(t *testing.T) {
 	assert.Contains(t, result, "-v /mnt/disks/minecraft/data:/data")
 }
 
+func TestRenderCloudConfig_MetioUserNoHardcodedUID(t *testing.T) {
+	cfg := &TemplateConfig{
+		Region:              "europe-west3",
+		MachineAgentImage:   "europe-west3-docker.pkg.dev/minecraftbyl/metio/machine-agent:tag",
+		BackupBucket:        "my-project-development-backups",
+		ServerID:            "0dcbaca4-2a26-489c-b4a3-d2fad8bb6483",
+		BackupRetentionDays: 90,
+		ResticPassword:      "deployment-wide-restic-password",
+		RCONPassword:        "rcon-password",
+	}
+	result, err := RenderCloudConfig(cfg)
+	assert.NoError(t, err)
+
+	// UID 1000 collides with COS's `chronos` stub account; the user must be
+	// auto-allocated so cloud-init can create it.
+	assert.NotContains(t, result, "uid: 1000")
+
+	// Only the one users entry must render; nothing else may pin a uid.
+	var parsed map[string]interface{}
+	assert.NoError(t, yaml.Unmarshal([]byte(result), &parsed))
+	users, ok := parsed["users"].([]interface{})
+	assert.True(t, ok, "users must be a list")
+	assert.Len(t, users, 1)
+	user, ok := users[0].(map[string]interface{})
+	assert.True(t, ok, "user entry must be a map")
+	assert.NotContains(t, user, "uid", "the metio user must not pin a UID")
+}
+
+func TestRenderCloudConfig_MetioUserGuardBeforeStart(t *testing.T) {
+	cfg := &TemplateConfig{
+		Region:              "europe-west3",
+		MachineAgentImage:   "europe-west3-docker.pkg.dev/minecraftbyl/metio/machine-agent:tag",
+		BackupBucket:        "my-project-development-backups",
+		ServerID:            "0dcbaca4-2a26-489c-b4a3-d2fad8bb6483",
+		BackupRetentionDays: 90,
+		ResticPassword:      "deployment-wide-restic-password",
+		RCONPassword:        "rcon-password",
+		BackupServiceEnable: "minecraft-backup ",
+	}
+	result, err := RenderCloudConfig(cfg)
+	assert.NoError(t, err)
+
+	// The id/useradd guard must run before systemctl starts any User=metio
+	// unit so a failed user creation cannot silently take down all services.
+	guardIdx := strings.Index(result, "id -u metio >/dev/null 2>&1 || useradd")
+	startIdx := strings.Index(result, "systemctl start minecraft")
+	assert.True(t, guardIdx >= 0, "runcmd must contain the metio user guard")
+	assert.True(t, startIdx >= 0, "runcmd must start services")
+	assert.True(t, guardIdx < startIdx, "metio user guard must precede service start")
+}
+
 func TestRenderCloudConfig_BackupOverrides(t *testing.T) {
 	cfg := &TemplateConfig{
 		Region:               "europe-west3",
