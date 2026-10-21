@@ -102,6 +102,22 @@ Once deployed, visit your Metio instance, complete the setup wizard, and create 
 - Docker (for image builds)
 - OpenTofu (for infrastructure deployment)
 
+### Required GCP APIs
+
+The following GCP APIs must be enabled in your project (the deployment flows will validate them automatically):
+
+- Cloud Tasks API (`cloudtasks.googleapis.com`)
+- Secret Manager API (`secretmanager.googleapis.com`)
+- Cloud Run Admin API (`run.googleapis.com`)
+- Cloud Scheduler API (`cloudscheduler.googleapis.com`)
+
+You can enable them manually:
+```bash
+gcloud services enable cloudtasks.googleapis.com secretmanager.googleapis.com run.googleapis.com cloudscheduler.googleapis.com --project=<your-project-id>
+```
+
+Or let the automated check guide you - it runs as part of `make deploy` and related targets.
+
 ### Initial Setup
 
 1. Clone the repository:
@@ -118,20 +134,20 @@ Once deployed, visit your Metio instance, complete the setup wizard, and create 
 3. Configure GCP authentication:
    ```bash
    gcloud auth application-default login
+   gcloud config set project <your-project-id>
    ```
 
-4. Set up environment variables (create `.env` or export):
+4. Set up configuration (unified source of truth):
+
+   Copy the example config and fill in your values:
    ```bash
-   export GCP_PROJECT="your-project-id"
-   export GCP_ZONE="europe-west3-a"
-   export REGION="europe-west3"
-   export ENVIRONMENT="development"
-   export INSTANCE_NAME="your-minecraft-server"
-   export SESSION_KEY="your-secret-session-key"
-   export BASE_URL="http://localhost:8080"
-   export GOOGLE_CLIENT_ID="your-oauth-client-id"
-   export GOOGLE_CLIENT_SECRET="your-oauth-client-secret"
-   export ALLOWED_USERS="your-email@example.com"
+   cp metio.env.example metio.env
+   # Edit metio.env with your GCP project, zone, OAuth credentials, etc.
+   ```
+
+   Generate the derived configuration files (`.devcontainer/devcontainer.env` and `deploy/metio.auto.tfvars`):
+   ```bash
+   make generate-config
    ```
 
 ### GitHub Codespaces
@@ -188,7 +204,6 @@ This serves the pre-built frontend from `static/dist/`. Run `cd web && npm run b
 | `GCP_PROJECT` | Yes | GCP project ID |
 | `GCP_ZONE` | Yes | GCP zone (e.g., `europe-west3-a`) |
 | `REGION` | Yes | GCP region (e.g., `europe-west3`) |
-| `INSTANCE_NAME` | Yes | Compute Engine instance name |
 | `ENVIRONMENT` | Yes | Environment name (`development`/`production`) |
 | `SESSION_KEY` | Yes | Secret key for session cookies |
 | `BASE_URL` | Yes | Application base URL for OAuth redirects |

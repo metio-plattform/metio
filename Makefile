@@ -211,35 +211,57 @@ print-version:
 	@echo "VERSION=$(VERSION)"
 	@echo "IMAGE_TAG=$(IMAGE_TAG)"
 
+# Generate configuration files from unified metio.env source
+generate-config:
+	@mkdir -p build .devcontainer deploy
+	@./tools/generate-config.sh
+
+# Validate required GCP APIs are enabled
+validate-gcp-apis:
+	@./tools/validate-gcp-apis.sh
+
+# Check GCP APIs (alias)
+check-apis: validate-gcp-apis
+
 # CI controller image build — tag for ghcr.io, load into local daemon (no push)
 ci-controller-image:
-	@SHA=$(IMAGE_TAG); \
-	echo "Building controller image for CI: ghcr.io/metio-plattform/metio/controller:$${SHA}"; \
-	docker buildx build --platform linux/amd64 -t ghcr.io/metio-plattform/metio/controller:$${SHA} --build-arg VERSION=$(VERSION) -f cmd/controller/Dockerfile --load .
+	@mkdir -p build; SHA=$(IMAGE_TAG); \
+	if [ -f build/registry.env ]; then . build/registry.env; fi; \
+	ORG=$${GITHUB_ORG:-metio-plattform}; REPO=$${GITHUB_REPO:-metio}; \
+	echo "Building controller image for CI: ghcr.io/$${ORG}/$${REPO}/controller:$${SHA}"; \
+	docker buildx build --platform linux/amd64 -t ghcr.io/$${ORG}/$${REPO}/controller:$${SHA} --build-arg VERSION=$(VERSION) -f cmd/controller/Dockerfile --load .
 
 # CI machine-agent image build — tag for ghcr.io, load into local daemon (no push)
 ci-machine-agent-image:
-	@SHA=$(IMAGE_TAG); \
-	echo "Building machine-agent image for CI: ghcr.io/metio-plattform/metio/machine-agent:$${SHA}"; \
-	docker buildx build --platform linux/amd64 -t ghcr.io/metio-plattform/metio/machine-agent:$${SHA} --build-arg VERSION=$(VERSION) -f cmd/machine-agent/Dockerfile --load .
+	@mkdir -p build; SHA=$(IMAGE_TAG); \
+	if [ -f build/registry.env ]; then . build/registry.env; fi; \
+	ORG=$${GITHUB_ORG:-metio-plattform}; REPO=$${GITHUB_REPO:-metio}; \
+	echo "Building machine-agent image for CI: ghcr.io/$${ORG}/$${REPO}/machine-agent:$${SHA}"; \
+	docker buildx build --platform linux/amd64 -t ghcr.io/$${ORG}/$${REPO}/machine-agent:$${SHA} --build-arg VERSION=$(VERSION) -f cmd/machine-agent/Dockerfile --load .
 
 # CI mc-backup image build — tag for ghcr.io, load into local daemon (no push)
 ci-mc-backup-image:
-	@SHA=$(IMAGE_TAG); \
-	echo "Building mc-backup image for CI: ghcr.io/metio-plattform/metio/mc-backup:$${SHA}"; \
-	docker buildx build --platform linux/amd64 -t ghcr.io/metio-plattform/metio/mc-backup:$${SHA} -f cmd/mc-backup/Dockerfile --load .
+	@mkdir -p build; SHA=$(IMAGE_TAG); \
+	if [ -f build/registry.env ]; then . build/registry.env; fi; \
+	ORG=$${GITHUB_ORG:-metio-plattform}; REPO=$${GITHUB_REPO:-metio}; \
+	echo "Building mc-backup image for CI: ghcr.io/$${ORG}/$${REPO}/mc-backup:$${SHA}"; \
+	docker buildx build --platform linux/amd64 -t ghcr.io/$${ORG}/$${REPO}/mc-backup:$${SHA} -f cmd/mc-backup/Dockerfile --load .
 
 # CI daprd image build — tag for ghcr.io, load into local daemon (no push)
 ci-daprd-image:
-	@SHA=$(IMAGE_TAG); \
-	echo "Building daprd image for CI: ghcr.io/metio-plattform/metio/daprd:$${SHA}"; \
-	docker buildx build --platform linux/amd64 -t ghcr.io/metio-plattform/metio/daprd:$${SHA} -f cmd/daprd/Dockerfile --load .
+	@mkdir -p build; SHA=$(IMAGE_TAG); \
+	if [ -f build/registry.env ]; then . build/registry.env; fi; \
+	ORG=$${GITHUB_ORG:-metio-plattform}; REPO=$${GITHUB_REPO:-metio}; \
+	echo "Building daprd image for CI: ghcr.io/$${ORG}/$${REPO}/daprd:$${SHA}"; \
+	docker buildx build --platform linux/amd64 -t ghcr.io/$${ORG}/$${REPO}/daprd:$${SHA} -f cmd/daprd/Dockerfile --load .
 
 # Local controller image build + push to Artifact Registry
 controller-image:
 	@mkdir -p build
 	@SHA=$(IMAGE_TAG); \
-	IMAGE="europe-west3-docker.pkg.dev/minecraftbyl/metio/controller:$${SHA}"; \
+	if [ -f build/registry.env ]; then . build/registry.env; else ./tools/generate-config.sh >/dev/null 2>&1 || true; . build/registry.env 2>/dev/null || true; fi; \
+	REG_PROJ=$${GCP_ARTIFACT_REGISTRY_PROJECT:-minecraftbyl}; REG_LOC=$${GCP_ARTIFACT_REGISTRY_LOCATION:-europe-west3}; REG_REPO=$${GCP_ARTIFACT_REGISTRY_REPO:-metio}; \
+	IMAGE="$$REG_LOC-docker.pkg.dev/$$REG_PROJ/$$REG_REPO/controller:$${SHA}"; \
 	echo "Building controller image: $${IMAGE}"; \
 	docker buildx build --platform linux/amd64 -f cmd/controller/Dockerfile -t $${IMAGE} --build-arg VERSION=$(VERSION) --push . && \
 	echo "$${IMAGE}" > build/controller-image.txt
@@ -248,7 +270,9 @@ controller-image:
 machine-agent-image:
 	@mkdir -p build
 	@SHA=$(IMAGE_TAG); \
-	IMAGE="europe-west3-docker.pkg.dev/minecraftbyl/metio/machine-agent:$${SHA}"; \
+	if [ -f build/registry.env ]; then . build/registry.env; else ./tools/generate-config.sh >/dev/null 2>&1 || true; . build/registry.env 2>/dev/null || true; fi; \
+	REG_PROJ=$${GCP_ARTIFACT_REGISTRY_PROJECT:-minecraftbyl}; REG_LOC=$${GCP_ARTIFACT_REGISTRY_LOCATION:-europe-west3}; REG_REPO=$${GCP_ARTIFACT_REGISTRY_REPO:-metio}; \
+	IMAGE="$$REG_LOC-docker.pkg.dev/$$REG_PROJ/$$REG_REPO/machine-agent:$${SHA}"; \
 	echo "Building machine-agent image: $${IMAGE}"; \
 	docker buildx build --platform linux/amd64 -f cmd/machine-agent/Dockerfile -t $${IMAGE} --build-arg VERSION=$(VERSION) --push . && \
 	echo "$${IMAGE}" > build/machine-agent-image.txt
@@ -257,7 +281,9 @@ machine-agent-image:
 mc-backup-image:
 	@mkdir -p build
 	@SHA=$(IMAGE_TAG); \
-	IMAGE="europe-west3-docker.pkg.dev/minecraftbyl/metio/mc-backup:$${SHA}"; \
+	if [ -f build/registry.env ]; then . build/registry.env; else ./tools/generate-config.sh >/dev/null 2>&1 || true; . build/registry.env 2>/dev/null || true; fi; \
+	REG_PROJ=$${GCP_ARTIFACT_REGISTRY_PROJECT:-minecraftbyl}; REG_LOC=$${GCP_ARTIFACT_REGISTRY_LOCATION:-europe-west3}; REG_REPO=$${GCP_ARTIFACT_REGISTRY_REPO:-metio}; \
+	IMAGE="$$REG_LOC-docker.pkg.dev/$$REG_PROJ/$$REG_REPO/mc-backup:$${SHA}"; \
 	echo "Building mc-backup image: $${IMAGE}"; \
 	docker buildx build --platform linux/amd64 -f cmd/mc-backup/Dockerfile -t $${IMAGE} --push . && \
 	echo "$${IMAGE}" > build/mc-backup-image.txt
@@ -266,17 +292,22 @@ mc-backup-image:
 daprd-image:
 	@mkdir -p build
 	@SHA=$(IMAGE_TAG); \
-	IMAGE="europe-west3-docker.pkg.dev/minecraftbyl/metio/daprd:$${SHA}"; \
+	if [ -f build/registry.env ]; then . build/registry.env; else ./tools/generate-config.sh >/dev/null 2>&1 || true; . build/registry.env 2>/dev/null || true; fi; \
+	REG_PROJ=$${GCP_ARTIFACT_REGISTRY_PROJECT:-minecraftbyl}; REG_LOC=$${GCP_ARTIFACT_REGISTRY_LOCATION:-europe-west3}; REG_REPO=$${GCP_ARTIFACT_REGISTRY_REPO:-metio}; \
+	IMAGE="$$REG_LOC-docker.pkg.dev/$$REG_PROJ/$$REG_REPO/daprd:$${SHA}"; \
 	echo "Building daprd image: $${IMAGE}"; \
 	docker buildx build --platform linux/amd64 -f cmd/daprd/Dockerfile -t $${IMAGE} --push . && \
 	echo "$${IMAGE}" > build/daprd-image.txt
 
 # Push images to ghcr.io
 push-images:
-	docker push ghcr.io/metio-plattform/metio/controller:$(IMAGE_TAG)
-	docker push ghcr.io/metio-plattform/metio/machine-agent:$(IMAGE_TAG)
-	docker push ghcr.io/metio-plattform/metio/mc-backup:$(IMAGE_TAG)
-	docker push ghcr.io/metio-plattform/metio/daprd:$(IMAGE_TAG)
+	@mkdir -p build
+	@if [ -f build/registry.env ]; then . build/registry.env; fi; \
+	ORG=$${GITHUB_ORG:-metio-plattform}; REPO=$${GITHUB_REPO:-metio}; \
+	docker push ghcr.io/$$ORG/$$REPO/controller:$(IMAGE_TAG); \
+	docker push ghcr.io/$$ORG/$$REPO/machine-agent:$(IMAGE_TAG); \
+	docker push ghcr.io/$$ORG/$$REPO/mc-backup:$(IMAGE_TAG); \
+	docker push ghcr.io/$$ORG/$$REPO/daprd:$(IMAGE_TAG)
 
 # Promote image tags (usage: make promote FROM=a1b2c3d4 TO=main)
 promote:
@@ -284,21 +315,28 @@ promote:
 		echo "Usage: make promote FROM=<sha> TO=<tag>"; \
 		exit 1; \
 	fi
-	docker buildx imagetools create --prefer-index=false -t ghcr.io/metio-plattform/metio/controller:$(TO) ghcr.io/metio-plattform/metio/controller:$(FROM)
-	docker buildx imagetools create --prefer-index=false -t ghcr.io/metio-plattform/metio/machine-agent:$(TO) ghcr.io/metio-plattform/metio/machine-agent:$(FROM)
-	docker buildx imagetools create --prefer-index=false -t ghcr.io/metio-plattform/metio/mc-backup:$(TO) ghcr.io/metio-plattform/metio/mc-backup:$(FROM)
-	docker buildx imagetools create --prefer-index=false -t ghcr.io/metio-plattform/metio/daprd:$(TO) ghcr.io/metio-plattform/metio/daprd:$(FROM)
+	@mkdir -p build
+	@if [ -f build/registry.env ]; then . build/registry.env; fi; \
+	ORG=$${GITHUB_ORG:-metio-plattform}; REPO=$${GITHUB_REPO:-metio}; \
+	docker buildx imagetools create --prefer-index=false -t ghcr.io/$$ORG/$$REPO/controller:$(TO) ghcr.io/$$ORG/$$REPO/controller:$(FROM); \
+	docker buildx imagetools create --prefer-index=false -t ghcr.io/$$ORG/$$REPO/machine-agent:$(TO) ghcr.io/$$ORG/$$REPO/machine-agent:$(FROM); \
+	docker buildx imagetools create --prefer-index=false -t ghcr.io/$$ORG/$$REPO/mc-backup:$(TO) ghcr.io/$$ORG/$$REPO/mc-backup:$(FROM); \
+	docker buildx imagetools create --prefer-index=false -t ghcr.io/$$ORG/$$REPO/daprd:$(TO) ghcr.io/$$ORG/$$REPO/daprd:$(FROM)
 
 # Promote images from ghcr.io to GCP Artifact Registry (distribution repo)
 DISTRO_REGISTRY ?= europe-docker.pkg.dev/metio-distribution/metio
 promote-distribution:
-	@for img in controller machine-agent mc-backup daprd; do \
-		src="ghcr.io/metio-plattform/metio/$${img}:$(IMAGE_TAG)"; \
-		tags="-t $(DISTRO_REGISTRY)/$${img}:$(IMAGE_TAG)"; \
+	@mkdir -p build
+	@if [ -f build/registry.env ]; then . build/registry.env; fi; \
+	ORG=$${GITHUB_ORG:-metio-plattform}; REPO=$${GITHUB_REPO:-metio}; \
+	REG=$${DISTRO_REGISTRY:-europe-docker.pkg.dev/metio-distribution/metio}; \
+	for img in controller machine-agent mc-backup daprd; do \
+		src="ghcr.io/$$ORG/$$REPO/$${img}:$(IMAGE_TAG)"; \
+		tags="-t $$REG/$${img}:$(IMAGE_TAG)"; \
 		if [ -n "$(VERSION)" ]; then \
-			tags="$${tags} -t $(DISTRO_REGISTRY)/$${img}:$(VERSION)"; \
+			tags="$${tags} -t $$REG/$${img}:$(VERSION)"; \
 		fi; \
-		echo "promoting $${src}"; \
+		echo "promoting $${src} to $$REG"; \
 		docker buildx imagetools create --prefer-index=false $${tags} "$${src}" || exit 1; \
 	done
 
@@ -380,7 +418,7 @@ codespace-setup:
 deploy: deploy-full
 
 # Deploy full system: build all images and deploy all infrastructure
-deploy-full: build-images
+deploy-full: validate-gcp-apis build-images
 	@set -e ;\
 	if [ ! -f "build/machine-agent-image.txt" ] || [ ! -f "build/controller-image.txt" ] || [ ! -f "build/daprd-image.txt" ] || [ ! -f "build/mc-backup-image.txt" ]; then \
 		echo "Error: Image tag files not found. Run 'make build-images' first." ;\
@@ -399,7 +437,7 @@ deploy-full: build-images
 	tofu -chdir=deploy apply -var="machine_agent_image=$${MACHINE_AGENT_IMAGE_TAG}" -var="controller_image=$${CONTROLLER_IMAGE_TAG}" -var="daprd_image=$${DAPRD_IMAGE_TAG}" -var="backup_image=$${MC_BACKUP_IMAGE_TAG}" -var="deploy_id=$${DEPLOY_ID}" -auto-approve
 
 # Deploy infrastructure only: use existing images or module defaults
-deploy-infrastructure:
+deploy-infrastructure: validate-gcp-apis
 	@set -e ;\
 	DEPLOY_ID=$$(date +%s) ;\
 	set -- -var="deploy_id=$${DEPLOY_ID}" ;\
@@ -423,7 +461,7 @@ deploy-infrastructure:
 	tofu -chdir=deploy apply "$$@" -auto-approve
 
 # Deploy machine-agent only: build machine-agent image and deploy infrastructure
-deploy-machine-agent: machine-agent-image
+deploy-machine-agent: validate-gcp-apis machine-agent-image
 	@set -e ;\
 	if [ ! -f "build/machine-agent-image.txt" ]; then \
 		echo "Error: Machine agent image tag file not found. Run 'make machine-agent-image' first." ;\
@@ -450,7 +488,7 @@ deploy-machine-agent: machine-agent-image
 	tofu -chdir=deploy apply "$$@" -auto-approve
 
 # Deploy controller only: build controller and daprd images and update Cloud Run service
-deploy-controller: controller-image daprd-image
+deploy-controller: validate-gcp-apis controller-image daprd-image
 	@set -e ;\
 	if [ ! -f "build/controller-image.txt" ] || [ ! -f "build/daprd-image.txt" ]; then \
 		echo "Error: Image tag files not found. Run 'make controller-image daprd-image' first." ;\
