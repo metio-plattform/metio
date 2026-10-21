@@ -109,10 +109,11 @@ The following GCP APIs must be enabled in your project (the deployment flows wil
 - Cloud Tasks API (`cloudtasks.googleapis.com`)
 - Secret Manager API (`secretmanager.googleapis.com`)
 - Cloud Run Admin API (`run.googleapis.com`)
+- Cloud Scheduler API (`cloudscheduler.googleapis.com`)
 
 You can enable them manually:
 ```bash
-gcloud services enable cloudtasks.googleapis.com secretmanager.googleapis.com run.googleapis.com --project=<your-project-id>
+gcloud services enable cloudtasks.googleapis.com secretmanager.googleapis.com run.googleapis.com cloudscheduler.googleapis.com --project=<your-project-id>
 ```
 
 Or let the automated check guide you - it runs as part of `make deploy` and related targets.
