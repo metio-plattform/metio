@@ -238,3 +238,47 @@ func TestLoad_SaveAckTimeoutInvalid(t *testing.T) {
 		})
 	}
 }
+
+func TestLoad_PackInstallTimeoutDefault(t *testing.T) {
+	viper.Reset()
+	viper.AutomaticEnv()
+
+	t.Setenv("MACHINE_AGENT_IMAGE", "test-image:latest")
+	os.Unsetenv("PACK_INSTALL_TIMEOUT")
+
+	cfg, err := Load()
+
+	assert.NoError(t, err)
+	assert.Equal(t, DefaultPackInstallTimeout, cfg.PackInstallTimeout)
+}
+
+func TestLoad_PackInstallTimeoutCustom(t *testing.T) {
+	viper.Reset()
+	viper.AutomaticEnv()
+
+	t.Setenv("MACHINE_AGENT_IMAGE", "test-image:latest")
+	t.Setenv("PACK_INSTALL_TIMEOUT", "7m")
+
+	cfg, err := Load()
+
+	assert.NoError(t, err)
+	assert.Equal(t, 7*time.Minute, cfg.PackInstallTimeout)
+}
+
+func TestLoad_PackInstallTimeoutInvalid(t *testing.T) {
+	viper.Reset()
+	viper.AutomaticEnv()
+
+	t.Setenv("MACHINE_AGENT_IMAGE", "test-image:latest")
+
+	for _, raw := range []string{"0", "-1s", "abc"} {
+		t.Run(raw, func(t *testing.T) {
+			t.Setenv("PACK_INSTALL_TIMEOUT", raw)
+
+			_, err := Load()
+
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "PACK_INSTALL_TIMEOUT")
+		})
+	}
+}

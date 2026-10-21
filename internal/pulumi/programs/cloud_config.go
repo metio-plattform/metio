@@ -139,11 +139,16 @@ func RenderCloudConfig(config *TemplateConfig) (string, error) {
 	// Modrinth pack (ADR-0006). A pack-driven server omits VERSION entirely and
 	// passes the pack, plus its pinned version when one was chosen; the image
 	// then resolves loader, Minecraft version and mods from the pack manifest.
+	//
+	// TYPE must be set to MODRINTH: the image only treats MODRINTH_MODPACK as a
+	// modpack when the server type (or MODPACK_PLATFORM) says so, and otherwise
+	// keeps its VANILLA default and boots unmodded.
+	//
 	// The multi-line form keeps the systemd line-continuation backslashes
 	// consistent with the surrounding ExecStart block.
 	minecraftArgs := fmt.Sprintf("-e VERSION=%s \\", config.MinecraftVersion)
 	if config.Modpack != nil {
-		minecraftArgs = fmt.Sprintf("-e MODRINTH_MODPACK=%s \\", config.Modpack.ProjectID)
+		minecraftArgs = fmt.Sprintf("-e TYPE=MODRINTH \\\n        -e MODRINTH_MODPACK=%s \\", config.Modpack.ProjectID)
 		if config.Modpack.VersionID != "" {
 			minecraftArgs += fmt.Sprintf("\n        -e MODRINTH_VERSION=%s \\", config.Modpack.VersionID)
 		}

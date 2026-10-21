@@ -58,7 +58,9 @@ The governing constraint is `internal/pulumi/programs/server.go:428`:
 
 - **E. `MODPACK` (zip URL).** Generic but the user must find a raw zip; no metadata, no browsing.
 - **F. `MODRINTH_MODPACK`.** Platform-native `.mrpack` install. The image resolves loader,
-  Minecraft version, and mods from the pack manifest. Requires **no credentials**.
+  Minecraft version, and mods from the pack manifest. Requires **no credentials**. The install
+  only engages when `TYPE=MODRINTH` is also set; without it the image keeps its `VANILLA`
+  default and boots an unmodded server.
 - **G. `AUTO_CURSEFORGE`.** Equivalent coverage for CurseForge packs, and the larger catalogue.
   **Rejected on driver 4:** the pack install runs *inside the container*, so `CF_API_KEY` must be
   present on the VM and would therefore land in instance metadata. That is a meaningfully
@@ -83,10 +85,10 @@ Modpack *ModpackConfig `json:"modpack,omitempty"`
 // VersionID string  // pinned; empty means latest
 ```
 
-Rendered into the cloud-config as a `MODRINTH_MODPACK` placeholder. `TYPE`, `VERSION` and the mod
-set all come from the pack manifest, so **Metio does not ask the user for a loader or a Minecraft
-version** when a pack is selected -- the Minecraft version field is disabled and shown as
-pack-controlled.
+Rendered into the cloud-config as `TYPE=MODRINTH` plus a `MODRINTH_MODPACK` placeholder. `VERSION`
+and the mod set come from the pack manifest, so **Metio does not ask the user for a loader or a
+Minecraft version** when a pack is selected -- the Minecraft version field is disabled and shown
+as pack-controlled.
 
 The `Platform` field is retained despite having a single valid value today, so that adding a
 second source later is an additive change rather than a schema migration.
@@ -150,8 +152,13 @@ architectural commitment; no v0-generated code ships unreviewed.
 - **CurseForge packs are not supported**, which excludes a large share of the popular pack
   catalogue. This is the main functional cost of the decision and the most likely reason to
   revisit this ADR.
-- Large packs materially lengthen first boot; provisioning feedback must reflect that.
-- `CurrentInfraVersion` (`internal/pulumi/programs/version.go`, currently `4`) must be bumped.
+- Large packs materially lengthen first boot; provisioning feedback must reflect that. The
+  controller therefore reports the install as an explicit `install_modpack` provisioning step on
+  create and on pack-changing recreates, and waits (bounded by `PACK_INSTALL_TIMEOUT`, 20m by
+  default) until the server answers RCON, which it only does after the pack is installed and the
+  server finished starting. The wait is non-fatal: exceeding it logs a warning and completes the
+  step, because the VM keeps installing on its own.
+- `CurrentInfraVersion` (`internal/pulumi/programs/version.go`, currently `8`) must be bumped.
 - Two copies of `buildProgramConfig` (`internal/handlers/servers/common.go:121` and
   `internal/handlers/tasks/handler.go:100`) must be kept in sync for every new field.
 - The `minecraftVersion` field becomes conditionally meaningless, which complicates the wizard,
