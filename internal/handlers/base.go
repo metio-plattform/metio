@@ -47,6 +47,7 @@ func New(ps servers.ProvisioningServiceInterface, vs setup.ValidationServiceInte
 	servers.ListMinecraftVersions = services.ListMinecraftVersions
 	servers.SearchModrinthPacks = services.SearchModrinthPacks
 	servers.ListModrinthPackVersions = services.ListModrinthPackVersions
+	servers.GetModrinthPack = services.GetModrinthPack
 	servers.GetUserEmail = getUserEmail
 	servers.WriteJSONError = WriteJSONError
 	if cfg != nil {

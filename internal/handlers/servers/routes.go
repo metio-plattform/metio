@@ -30,5 +30,6 @@ func RegisterRoutes(api *mux.Router) {
 	api.HandleFunc("/backups/{backupId}/servers", CreateServerFromBackup).Methods("POST")
 	api.HandleFunc("/options", ListOptions).Methods("GET")
 	api.HandleFunc("/modpacks/search", SearchModpacks).Methods("GET")
+	api.HandleFunc("/modpacks/{id}", GetModpack).Methods("GET")
 	api.HandleFunc("/modpacks/{id}/versions", ListModpackVersions).Methods("GET")
 }

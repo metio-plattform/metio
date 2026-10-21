@@ -75,4 +75,11 @@ var ListModrinthPackVersions = func(ctx context.Context, modpackID string) []ser
 	return []services.ModrinthVersion{}
 }
 
+// GetModrinthPack returns a single modpack by project id. It defaults to
+// "not found" so tests and any caller that has not wired the live service still
+// behave; base.go overrides it with the Modrinth-backed service in production.
+var GetModrinthPack = func(ctx context.Context, modpackID string) (services.ModrinthPack, bool) {
+	return services.ModrinthPack{}, false
+}
+
 var ControllerVersion string
