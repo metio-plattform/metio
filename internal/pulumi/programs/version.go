@@ -16,7 +16,14 @@ package programs
 // machine types, so machine-type changes remain a resize rather than a
 // recreate.
 //
+// Version 7 fixes provisioning on Container-Optimized OS: the hardcoded
+// UID 1000 for the `metio` user collided with COS's `chronos` stub account
+// (UID 1000), so cloud-init could not create the user and every systemd
+// unit failed with `217/USER`. The user is now auto-allocated; a runcmd
+// guard ensures `metio` exists before any unit starts. Existing servers
+// must be recreated to pick up the corrected user-data.
+//
 // Version 6 adds modpack support (ADR-0006): a pack-driven server passes
 // MODRINTH_MODPACK instead of VERSION, and the Minecraft version becomes
 // pack-controlled. Those servers deploy with an empty minecraftVersion.
-const CurrentInfraVersion = 6
+const CurrentInfraVersion = 7
