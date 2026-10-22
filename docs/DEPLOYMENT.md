@@ -413,6 +413,28 @@ To apply an update:
 The settings dialog's hint that the server "keeps running" during an update describes
 resizes and in-place changes; an infrastructure update replaces the machine.
 
+#### Version 9 — pack servers keep spark's profiler off the JVM
+
+Large modpacks (Prominence II, ArdaCraft, Better MC, …) bundle `spark` 1.10.x, whose async
+profiler segfaults on the Java 25 image and crash-loops the server before it answers RCON.
+Version 9 writes a `PRE_START_SCRIPT` hook onto pack servers. The hook runs after the pack
+install and just before the JVM starts, and disables spark's background profiler
+(`config/spark/config.json`: `{"backgroundProfiler": false}`). Because the image installs or
+re-syncs pack overrides during setup, the file is written from inside the container rather
+than from the host.
+
+Migration:
+
+1. Deploy a controller running version 9 or later.
+2. Apply the infrastructure update to **every pack-driven server** created before that
+   deployment. The recreate installs the hook; the data disk (world, mods, backups) survives.
+3. After the recreate, watch the `install_modpack` step and confirm the server reports its
+   Minecraft version instead of staying at `Unknown`. Manual profiling on the server must use
+   `/spark profiler --force-java-sampler`; spark's default engine is the crashing one.
+
+Vanilla servers render byte-identical user-data, so they need no recreate even though the
+dashboard shows the update badge.
+
 #### Version 8 — pack servers install their pack
 
 Servers created from a modpack on infrastructure version 6 or 7 ran the Minecraft container

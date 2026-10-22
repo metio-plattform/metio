@@ -103,12 +103,14 @@ The effective heap is not currently displayed in the UI; use the table above to 
 ## Known limitations
 
 - **CurseForge packs are unsupported** by design, for the credential reason above.
-- **Packs bundling `spark` 1.10.x can crash-loop on Java 25.** Some large packs ship
-  `spark-1.10.53`, whose async profiler crashes the JVM (`SIGSEGV` in
-  `VMThread::nativeThreadId`). The server then restarts in a loop; the install step
-  reaches its timeout and completes with a warning. Setting `"backgroundProfiler": false` in
-  `config/spark/config.json` and restarting the server works around it. Tracked in
-  [#631](https://github.com/metio-plattform/metio/issues/631).
+- **`spark` profiling is limited to the safe sampling engine.** Large packs bundle
+  `spark` 1.10.x, whose async profiler kills the JVM (`SIGSEGV` in
+  `VMThread::nativeThreadId`) on the Java 25 image. Metio therefore disables spark's
+  background profiler on pack servers before the server starts
+  ([#631](https://github.com/metio-plattform/metio/issues/631)). `spark` itself stays
+  installed: `/spark tps` and `/spark health` work, and manual profiling works with
+  `/spark profiler --force-java-sampler`. Without that flag spark loads async-profiler
+  and can crash the server.
 - **Very large packs and the default wait.** A pack that takes longer than
   `pack_install_timeout` still finishes installing, but the provisioning view stops
   following it. Raise the timeout if this is normal for your pack.
