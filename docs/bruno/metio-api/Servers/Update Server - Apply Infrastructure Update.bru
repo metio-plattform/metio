@@ -1,0 +1,30 @@
+meta {
+  name: Update Server - Apply Infrastructure Update
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/servers/:id
+  body: json
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+body:json {
+  {
+    "name": "my-pack-server",
+    "region": "europe-west3",
+    "zone": "europe-west3-a",
+    "machineType": "e2-standard-4",
+    "diskSizeGB": 50,
+    "minecraftVersion": ""
+  }
+}
+
+docs {
+  Apply a pending infrastructure update to a server whose `outdated` flag is true (shown as "Infrastructure Update Available" in the settings dialog). Send the current configuration back unchanged; rewriting `metadata.user-data` recreates the VM. See the Infrastructure Version Migrations section of docs/DEPLOYMENT.md.
+}

@@ -1,0 +1,18 @@
+meta {
+  name: List Server Backups
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/servers/:id/backups
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+docs {
+  List the backups of one server.
+}

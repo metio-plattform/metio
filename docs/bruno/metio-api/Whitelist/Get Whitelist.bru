@@ -1,0 +1,18 @@
+meta {
+  name: Get Whitelist
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/servers/:id/whitelist
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+docs {
+  Read the whitelist and whether it is enforced.
+}

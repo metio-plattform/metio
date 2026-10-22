@@ -1,0 +1,19 @@
+meta {
+  name: Remove Player
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/servers/:id/whitelist/:uuid
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+  uuid: player-uuid
+}
+
+docs {
+  Remove a player by UUID.
+}

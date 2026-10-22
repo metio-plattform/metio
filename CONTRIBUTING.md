@@ -242,6 +242,8 @@ metio/
 │           └── outputs.tf
 ├── docs/                     # Documentation
 │   ├── DEPLOYMENT.md         # Production deployment guide
+│   ├── MODPACKS.md           # Modpack user guide
+│   ├── bruno/metio-api/      # API collection (Bruno)
 │   └── insomnia/             # API collection (Insomnia)
 ├── static/dist/              # Built frontend (go:embed)
 └── Makefile                  # Build, test, deploy targets

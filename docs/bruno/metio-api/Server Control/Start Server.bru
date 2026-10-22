@@ -1,0 +1,18 @@
+meta {
+  name: Start Server
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/servers/:id/start
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+docs {
+  Start the server. The VM is provisioned if it was stopped or preempted.
+}

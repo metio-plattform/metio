@@ -1,0 +1,19 @@
+meta {
+  name: Restore Backup
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/servers/:id/backups/:backupId/restore
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+  backupId: your-backup-id
+}
+
+docs {
+  Restore a backup into the server data disk and restart it.
+}

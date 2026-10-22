@@ -1,0 +1,28 @@
+meta {
+  name: Update Backup Settings
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/servers/:id/settings/backup
+  body: json
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+body:json {
+  {
+    "enabled": true,
+    "backupIntervalHours": 24,
+    "keep": 7,
+    "keepUnit": "daily"
+  }
+}
+
+docs {
+  Update backup settings. Applied by re-provisioning the VM (a Pulumi deployment appears on the provisioning page).
+}

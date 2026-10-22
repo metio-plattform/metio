@@ -1,0 +1,26 @@
+meta {
+  name: Update Server - Remove Modpack
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/servers/:id
+  body: json
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+body:json {
+  {
+    "modpack": null,
+    "minecraftVersion": "1.21.4"
+  }
+}
+
+docs {
+  Remove the modpack and return to vanilla. `modpack: null` is an explicit removal; omitting the field keeps the current pack. A Minecraft version is required once no pack is configured.
+}

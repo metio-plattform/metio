@@ -1,0 +1,14 @@
+meta {
+  name: List Backups
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/backups
+  auth: none
+}
+
+docs {
+  List the catalogued backups across all servers, including retained backups of deleted servers.
+}

@@ -1,0 +1,14 @@
+meta {
+  name: List Servers
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/servers
+  auth: none
+}
+
+docs {
+  List all servers with their runtime state. Includes `outdated` and `outdatedMachineAgent` flags that drive the "Update Available" badge.
+}

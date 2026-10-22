@@ -1,0 +1,25 @@
+meta {
+  name: Set Whitelist Enabled
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/servers/:id/whitelist/enabled
+  body: json
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+body:json {
+  {
+    "enabled": true
+  }
+}
+
+docs {
+  Turn whitelist enforcement on or off.
+}
