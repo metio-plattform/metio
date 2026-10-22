@@ -12,7 +12,7 @@ users:
     groups: docker
     system: false
 write_files:
-${restoreWriteFiles}
+${restoreWriteFiles}${sparkWriteFiles}
   - path: /etc/systemd/system/minecraft.service
     permissions: '0644'
     content: |

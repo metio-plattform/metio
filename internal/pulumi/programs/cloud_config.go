@@ -10,6 +10,16 @@ import (
 //go:embed server_cloud_config.yml
 var cloudConfigTemplate string
 
+const (
+	// sparkPreStartHostDir lives on the boot disk (not the data disk) so the
+	// hook ships with the host's user-data and never appears in backups.
+	sparkPreStartHostDir = "/opt/metio/pre-start"
+	// sparkPreStartContainerDir is where the hook directory is mounted into
+	// the Minecraft container.
+	sparkPreStartContainerDir = "/hooks"
+	sparkPreStartScript       = "spark-profiler.sh"
+)
+
 type TemplateConfig struct {
 	Region               string
 	GCPProject           string
@@ -133,6 +143,37 @@ func RenderCloudConfig(config *TemplateConfig) (string, error) {
 			config.BackupBucket, sourcePrefix, config.ResticPassword,
 			config.BackupImage, config.RestoreSnapshotID, config.RestoreSnapshotID)
 	}
+	// Pack servers: spark 1.10.x bundles async-profiler, whose native code
+	// segfaults on the Temurin 25 image the platform pins (metio#631), so the
+	// server crash-loops before it ever answers RCON. The 1.10 line reads its
+	// settings only from config/spark/config.json (environment variables and
+	// system properties arrived after 1.10.53), so the file has to be written.
+	//
+	// The write happens in the image's PRE_START_SCRIPT hook rather than from
+	// the host: container setup installs or re-syncs the pack (including its
+	// overrides) after the container starts, so a file written before docker
+	// run can be replaced by pack content. Hook scripts execute directly, so
+	// the file must be executable, and the whole directory is mounted so a
+	// missing file cannot turn into a docker-created directory that fails the
+	// hook and blocks the server.
+	sparkWriteFiles := ""
+	if config.Modpack != nil {
+		sparkWriteFiles = fmt.Sprintf(`  - path: %s/%s
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      # Keep spark's async profiler off the JVM: its native code segfaults on
+      # Temurin 25 (metio#631). /spark profiler --force-java-sampler is the
+      # safe manual profiling path.
+      set -eu
+      cfg=/data/config/spark/config.json
+      mkdir -p /data/config/spark
+      if [ -f "$cfg" ] && grep -qE '"backgroundProfiler"[[:space:]]*:[[:space:]]*false|"backgroundProfilerEngine"[[:space:]]*:[[:space:]]*"java"' "$cfg"; then
+        exit 0
+      fi
+      printf '{ "backgroundProfiler": false }\n' > "$cfg"
+`, sparkPreStartHostDir, sparkPreStartScript)
+	}
 	startCommand := fmt.Sprintf("  - systemctl start minecraft %smetio-machine-agent", config.BackupServiceEnable)
 
 	// The Minecraft unit identifies what to run either by vanilla version or by
@@ -152,10 +193,13 @@ func RenderCloudConfig(config *TemplateConfig) (string, error) {
 		if config.Modpack.VersionID != "" {
 			minecraftArgs += fmt.Sprintf("\n        -e MODRINTH_VERSION=%s \\", config.Modpack.VersionID)
 		}
+		minecraftArgs += fmt.Sprintf("\n        -e PRE_START_SCRIPT=%s/%s \\", sparkPreStartContainerDir, sparkPreStartScript)
+		minecraftArgs += fmt.Sprintf("\n        -v %s:%s:ro \\", sparkPreStartHostDir, sparkPreStartContainerDir)
 	}
 
 	replacements := map[string]string{
 		"${restoreWriteFiles}":    restoreWriteFiles,
+		"${sparkWriteFiles}":      sparkWriteFiles,
 		"${afterRestore}":         afterRestore,
 		"${requiresRestore}":      requiresRestore,
 		"${startCommand}":         startCommand,

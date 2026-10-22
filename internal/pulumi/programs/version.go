@@ -31,4 +31,12 @@ package programs
 // modpack install requires TYPE=MODRINTH, and setting only MODRINTH_MODPACK
 // left the image's VANILLA default in place. Pack servers built on version 6
 // or 7 must be recreated to pick up the corrected user-data.
-const CurrentInfraVersion = 8
+//
+// Version 9 keeps spark's background profiler off pack servers: spark 1.10.x
+// bundles async-profiler, whose native code segfaults on the Java 25 image and
+// crash-loops the server (metio#631). Pack servers gain a PRE_START_SCRIPT
+// hook that writes config/spark/config.json before the JVM starts; vanilla
+// user-data is unchanged, but every server's stored version is older than this
+// one. Pack servers created before version 9 must be recreated to pick up the
+// hook.
+const CurrentInfraVersion = 9

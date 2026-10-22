@@ -425,6 +425,68 @@ func TestRenderCloudConfig_ModpackPinned(t *testing.T) {
 	assert.NotContains(t, result, "-e VERSION=")
 }
 
+func TestRenderCloudConfig_ModpackDisablesSparkProfiler(t *testing.T) {
+	// spark 1.10.x's async-profiler segfaults on the pinned Java 25 image
+	// (metio#631). Pack servers get a PRE_START_SCRIPT hook that writes the
+	// spark config after the pack install and before the JVM starts.
+	cfg := &TemplateConfig{
+		Region:            "europe-west3",
+		MachineAgentImage: "europe-west3-docker.pkg.dev/minecraftbyl/metio/machine-agent:tag",
+		MinecraftVersion:  "",
+		Modpack:           &ModpackConfig{Platform: "modrinth", ProjectID: "abC123"},
+		RCONPassword:      "rcon-pw",
+	}
+	result, err := RenderCloudConfig(cfg)
+	assert.NoError(t, err)
+
+	// The hook file is written with the boot disk and mounted read-only into
+	// the container; spark only reads its settings from the config file.
+	assert.Contains(t, result, "- path: /opt/metio/pre-start/spark-profiler.sh")
+	assert.Contains(t, result, "permissions: '0755'")
+	assert.Contains(t, result, "/data/config/spark/config.json")
+	assert.Contains(t, result, `printf '{ "backgroundProfiler": false }\n' > "$cfg"`)
+	assert.Contains(t, result, "-e PRE_START_SCRIPT=/hooks/spark-profiler.sh \\")
+	assert.Contains(t, result, "-v /opt/metio/pre-start:/hooks:ro \\")
+
+	// Parse the rendered document: the hook must land as an executable
+	// write_files entry, otherwise the image refuses to start the server.
+	var parsed struct {
+		WriteFiles []struct {
+			Path        string `yaml:"path"`
+			Permissions string `yaml:"permissions"`
+			Content     string `yaml:"content"`
+		} `yaml:"write_files"`
+	}
+	assert.NoError(t, yaml.Unmarshal([]byte(result), &parsed))
+	found := false
+	for _, wf := range parsed.WriteFiles {
+		if wf.Path != "/opt/metio/pre-start/spark-profiler.sh" {
+			continue
+		}
+		found = true
+		assert.Equal(t, "0755", wf.Permissions)
+		assert.True(t, strings.HasPrefix(wf.Content, "#!/bin/sh\n"), "hook needs a shebang")
+		assert.Contains(t, wf.Content, `"backgroundProfiler": false`)
+	}
+	assert.True(t, found, "pack servers must write the spark hook")
+}
+
+func TestRenderCloudConfig_VanillaHasNoSparkProfilerHook(t *testing.T) {
+	// Vanilla servers never bundle spark, so their user-data stays unchanged.
+	cfg := &TemplateConfig{
+		Region:            "europe-west3",
+		MachineAgentImage: "europe-west3-docker.pkg.dev/minecraftbyl/metio/machine-agent:tag",
+		MinecraftVersion:  "1.21.1",
+		RCONPassword:      "rcon-pw",
+	}
+	result, err := RenderCloudConfig(cfg)
+	assert.NoError(t, err)
+
+	assert.NotContains(t, result, "spark-profiler")
+	assert.NotContains(t, result, "PRE_START_SCRIPT")
+	assert.NotContains(t, result, "/opt/metio/pre-start")
+}
+
 func TestRenderCloudConfig_VanillaStillRendersVersion(t *testing.T) {
 	cfg := &TemplateConfig{
 		Region:            "europe-west3",
@@ -475,6 +537,14 @@ func TestRenderCloudConfig_YAMLValid(t *testing.T) {
 			MachineAgentImage:   "machine-agent:latest",
 			BackupServiceEnable: "minecraft-backup ",
 			RCONPassword:        "rcon-pw",
+		},
+		{
+			// Pack servers add an extra write_files entry (the spark hook),
+			// whose block scalar must not break the surrounding YAML.
+			Region:            "europe-west3",
+			MachineAgentImage: "machine-agent:latest",
+			Modpack:           &ModpackConfig{Platform: "modrinth", ProjectID: "abC123"},
+			RCONPassword:      "rcon-pw",
 		},
 	}
 	for _, cfg := range tests {
