@@ -888,7 +888,14 @@ func TestDestroyServer_Success(t *testing.T) {
 		}
 		deletedAt := args.Get(3).(time.Time)
 		retentionUntil := args.Get(4).(time.Time)
-		assert.InDelta(t, 30.0, retentionUntil.Sub(deletedAt).Hours()/24, 0.01)
+		// Retention is calendar arithmetic (ADR-0004): the deadline is exactly
+		// the same wall-clock time retentionDays later. Comparing absolute
+		// durations here made this test fail whenever the 30-day span crossed a
+		// DST transition (30d+1h in Europe/Berlin in October).
+		assert.True(t, retentionUntil.Equal(deletedAt.AddDate(0, 0, svc.backupRetentionDays)),
+			"retention must be %d calendar days after deletion, got %s after %s",
+			svc.backupRetentionDays, retentionUntil, deletedAt)
+		assert.False(t, retentionUntil.Before(deletedAt), "retention must not precede deletion")
 	}).Return(nil)
 
 	err := svc.DestroyServer(context.Background(), "srv1")
@@ -898,6 +905,81 @@ func TestDestroyServer_Success(t *testing.T) {
 	mockDB.AssertCalled(t, "DeleteServerConfig", mock.Anything, "srv1")
 	mockDB.AssertCalled(t, "MarkServerBackupsDeleted", mock.Anything, "srv1",
 		mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestBackupRetentionDeadline(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatalf("load Europe/Berlin: %v", err)
+	}
+	lordHowe, err := time.LoadLocation("Australia/Lord_Howe")
+	if err != nil {
+		t.Fatalf("load Australia/Lord_Howe: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		now  time.Time
+		days int
+		want time.Time
+		// wantSpan is the absolute duration between now and want. It is not
+		// retentionDays*24h whenever the span crosses a DST transition, which
+		// is exactly why the deadline must be compared by wall clock.
+		wantSpan time.Duration
+	}{
+		{
+			name:     "no DST transition",
+			now:      time.Date(2026, time.June, 1, 12, 0, 0, 0, berlin),
+			days:     30,
+			want:     time.Date(2026, time.July, 1, 12, 0, 0, 0, berlin),
+			wantSpan: 30 * 24 * time.Hour,
+		},
+		{
+			name:     "falls back across the autumn transition",
+			now:      time.Date(2026, time.October, 1, 12, 0, 0, 0, berlin),
+			days:     30,
+			want:     time.Date(2026, time.October, 31, 12, 0, 0, 0, berlin),
+			wantSpan: 30*24*time.Hour + time.Hour,
+		},
+		{
+			name:     "springs forward across the spring transition",
+			now:      time.Date(2026, time.March, 1, 12, 0, 0, 0, berlin),
+			days:     30,
+			want:     time.Date(2026, time.March, 31, 12, 0, 0, 0, berlin),
+			wantSpan: 30*24*time.Hour - time.Hour,
+		},
+		{
+			name:     "spans a leap day",
+			now:      time.Date(2028, time.January, 31, 12, 0, 0, 0, time.UTC),
+			days:     30,
+			want:     time.Date(2028, time.March, 1, 12, 0, 0, 0, time.UTC),
+			wantSpan: 30 * 24 * time.Hour,
+		},
+		{
+			name:     "UTC is unaffected by DST",
+			now:      time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC),
+			days:     30,
+			want:     time.Date(2026, time.October, 31, 12, 0, 0, 0, time.UTC),
+			wantSpan: 30 * 24 * time.Hour,
+		},
+		{
+			name:     "half-hour DST shift is preserved",
+			now:      time.Date(2026, time.September, 20, 12, 0, 0, 0, lordHowe),
+			days:     30,
+			want:     time.Date(2026, time.October, 20, 12, 0, 0, 0, lordHowe),
+			wantSpan: 30*24*time.Hour - 30*time.Minute,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := backupRetentionDeadline(tt.now, tt.days)
+			assert.True(t, got.Equal(tt.want), "got %s, want %s", got, tt.want)
+			assert.Equal(t, tt.now.Location(), got.Location(), "location must be preserved")
+			assert.True(t, got.After(tt.now), "deadline must follow the deletion")
+			assert.Equal(t, tt.wantSpan, got.Sub(tt.now), "absolute span")
+		})
+	}
 }
 
 func TestDestroyServer_ConfigLoadFailure_StillStampsDeletion(t *testing.T) {
