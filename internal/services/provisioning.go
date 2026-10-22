@@ -504,13 +504,27 @@ func (s *ProvisioningService) runDestroy(opCtx context.Context, status *db.Provi
 				Modpack:          config.Modpack,
 			}
 		}
-		retentionUntil := time.Now().AddDate(0, 0, s.backupRetentionDays)
-		if err := s.db.MarkServerBackupsDeleted(opCtx, serverID, sourceConfig, time.Now(), retentionUntil); err != nil {
+		// One timestamp feeds both the deletion mark and the deadline, so the
+		// deadline can never precede the moment it is measured from.
+		now := time.Now()
+		retentionUntil := backupRetentionDeadline(now, s.backupRetentionDays)
+		if err := s.db.MarkServerBackupsDeleted(opCtx, serverID, sourceConfig, now, retentionUntil); err != nil {
 			log.Printf("Failed to mark backups deleted for %s: %v", serverID, err)
 		}
 	}
 
 	return nil
+}
+
+// backupRetentionDeadline is the moment at which the backups of a destroyed
+// server stop being retained: the same wall-clock time, retentionDays later.
+// AddDate is deliberate calendar arithmetic — ADR-0004 specifies days, not a
+// fixed number of hours — so a span that crosses a daylight-saving transition
+// is 30d+1h or 30d-1h in absolute time (30m from a half-hour zone such as Lord
+// Howe). Cleanup compares absolute instants, so this only affects when the
+// sweep starts, not whether it is correct.
+func backupRetentionDeadline(now time.Time, retentionDays int) time.Time {
+	return now.AddDate(0, 0, retentionDays)
 }
 
 // ExecuteOperation runs a provisioning operation inline (bypassing the executor).
