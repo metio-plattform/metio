@@ -1,0 +1,14 @@
+meta {
+  name: Login
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/auth/login
+  auth: none
+}
+
+docs {
+  Start the Google OAuth flow. Open in a browser, not from the API client.
+}

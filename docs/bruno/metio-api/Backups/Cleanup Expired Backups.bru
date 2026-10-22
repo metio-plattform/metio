@@ -1,0 +1,14 @@
+meta {
+  name: Cleanup Expired Backups
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/backups/cleanup
+  auth: none
+}
+
+docs {
+  Sweep backups whose retention has expired. Normally invoked by Cloud Scheduler.
+}

@@ -22,3 +22,9 @@ admin_users = "your-email@example.com"
 # Cloud Scheduler cron expression for the expired deleted-server backup cleanup
 # sweep (ADR-0004). Defaults to hourly.
 # backup_cleanup_schedule = "0 * * * *"
+#
+# How long the controller waits for a pack-driven server to finish installing its
+# modpack on first boot before the install_modpack provisioning step gives up.
+# Exceeding it is not fatal: the VM keeps installing. Must stay below the 30m
+# controller operation timeout. Defaults to 20m.
+# pack_install_timeout = "20m"

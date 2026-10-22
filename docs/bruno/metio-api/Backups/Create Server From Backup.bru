@@ -1,0 +1,26 @@
+meta {
+  name: Create Server From Backup
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/backups/:backupId/servers
+  body: json
+  auth: none
+}
+
+params:path {
+  backupId: your-backup-id
+}
+
+body:json {
+  {
+    "name": "restored-server",
+    "machineType": "e2-standard-4"
+  }
+}
+
+docs {
+  Create a new server from a retained backup. `name` is required; other fields override the backup recorded configuration.
+}

@@ -1,0 +1,19 @@
+meta {
+  name: Search Modpacks
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/modpacks/search
+  auth: none
+}
+
+params:query {
+  query: adventure
+  mcVersion: 1.21.1
+}
+
+docs {
+  Search Modrinth modpacks. `query` is required - an empty query returns an empty array. `mcVersion` is optional and filters to packs for that Minecraft version. Results include id, slug, name, author, iconUrl, downloads, gameVersions and loader.
+}

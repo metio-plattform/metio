@@ -1,0 +1,26 @@
+meta {
+  name: Update Server
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/servers/:id
+  body: json
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+body:json {
+  {
+    "machineType": "e2-medium",
+    "diskSizeGB": 50
+  }
+}
+
+docs {
+  Change server settings. Machine-type changes resize the VM; image and user-data changes recreate it. Returns 202 Accepted with a provisioning Location header.
+}

@@ -1,0 +1,30 @@
+meta {
+  name: Create Server with Modpack
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/servers
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "my-pack-server",
+    "region": "europe-west3",
+    "zone": "europe-west3-a",
+    "machineType": "e2-standard-4",
+    "minecraftVersion": "",
+    "diskSizeGB": 50,
+    "modpack": {
+      "platform": "modrinth",
+      "projectId": "yourmodpack"
+    }
+  }
+}
+
+docs {
+  Create a pack-driven server (Modrinth only). Leave `minecraftVersion` empty - the pack controls the version, loader and mods. Omit `versionId` to install the latest version, or set it to pin one. The provisioning status gains an `install_modpack` step.
+}

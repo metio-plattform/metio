@@ -1,0 +1,18 @@
+meta {
+  name: Get Modpack
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/modpacks/:id
+  auth: none
+}
+
+params:path {
+  id: yourmodpack
+}
+
+docs {
+  Get a Modrinth project by ID (used to show an installed pack by name). Unknown or unreachable projects degrade to the ID instead of failing.
+}

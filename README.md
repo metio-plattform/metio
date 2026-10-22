@@ -15,6 +15,7 @@ Metio provisions Compute Engine VMs on the fly, so your server runs only when pl
 - **Whitelist management** — Add/remove players via the UI. Synced to the server automatically.
 - **Player dashboard** — See who's online, server version, uptime, and performance at a glance.
 - **Server profiles** — Configure CPU, memory, region, and Minecraft version per server.
+- **Modpack support** — Install a published Modrinth modpack at creation, or change it later. The pack controls the Minecraft version and mods; the JVM heap scales with the machine type.
 - **Backup support** — Attach persistent storage for world backups.
 - **Multi-server** — Run multiple independent Minecraft servers from a single deployment.
 
@@ -48,6 +49,7 @@ Once deployed, visit your Metio instance, complete the setup wizard, and create 
 | Guide | Description |
 |-------|-------------|
 | [Deployment Guide](docs/DEPLOYMENT.md) | Full GCP project setup through production deployment |
+| [Modpacks](docs/MODPACKS.md) | Choosing, changing and sizing a Modrinth modpack server |
 | [Contributing](CONTRIBUTING.md) | Development setup, coding standards, and PR process |
 | [Code of Conduct](CODE_OF_CONDUCT.md) | Community guidelines and reporting |
 | [Security Policy](SECURITY.md) | Reporting vulnerabilities and supported versions |
