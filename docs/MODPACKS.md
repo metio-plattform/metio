@@ -115,6 +115,50 @@ The effective heap is not currently displayed in the UI; use the table above to 
   `pack_install_timeout` still finishes installing, but the provisioning view stops
   following it. Raise the timeout if this is normal for your pack.
 
+## Known pack compatibility issues
+
+Pack compatibility is tracked by pack, version and loader — not by individual mod. A mod
+that crashes one pack's server can work on a client or in another pack, so this is not a
+list of "broken mods". Update or remove an entry when a later pack version fixes the issue.
+
+| Pack | Version | Loader | Symptoms | Workaround |
+|------|---------|--------|----------|------------|
+| [Better MC BMC4](https://modrinth.com/modpack/better-mc-forge-bmc4) | v59 (`bdRIjRgs`) | Forge 47.4.20 / Minecraft 1.20.1 | `HeadlessException`; missing mandatory dependencies; client-class / `ClassCastException` crash | Use a server-ready pack or a newer pack version |
+
+**Better MC [FORGE] BMC4 v59** is not server-ready as packaged. Its `modrinth.index.json`
+marks all 340 entries as `server: required`, so the installer includes client-only mods.
+The server first fails in Missing Mods Checker (`HeadlessException`), then on four mandatory
+dependencies the pack omits (`temporalapi`, `connectormod`, `flib`, `twilightforest`), and
+then on a client-class / `ClassCastException` failure in `particle_effects`. Adding or
+removing individual mods is not a supported fix; use a server-ready pack or a newer version.
+
+*Last verified: 2026-10-24. Upstream support: [LunaPixel Discord](https://discord.gg/LunaPixel).*
+
+### Diagnosing a pack crash loop
+
+A crash-looping pack can still show the container as running. Check the restart count and
+the server log:
+
+```bash
+systemctl show minecraft -p NRestarts -p ActiveState -p SubState
+sudo journalctl -u minecraft -n 100 --no-pager
+sudo tail -n 100 /mnt/disks/minecraft/data/logs/latest.log
+sudo ls /mnt/disks/minecraft/data/crash-reports/
+```
+
+`docker logs` is not reliable here: the unit runs the container with `--rm`, so the previous
+attempt's output is gone by the time systemd restarts it.
+
+Typical causes in the log:
+
+- `HeadlessException` or `MissingModsChecker` — a client-only GUI mod is installed.
+- `Missing or unsupported mandatory dependencies` — the pack omitted a required mod.
+- `Attempted to load class net/minecraft/client/... for invalid dist DEDICATED_SERVER` or
+  `ClassCastException` — a client-only mod or an incompatible Connector mix.
+
+Metio does not surface crash loops in the dashboard yet; see
+[#637](https://github.com/metio-plattform/metio/issues/637).
+
 ## Troubleshooting
 
 **The install step runs for a long time.** That is expected for large packs. Follow the
