@@ -439,36 +439,51 @@ func TestRenderCloudConfig_ModpackDisablesSparkProfiler(t *testing.T) {
 	result, err := RenderCloudConfig(cfg)
 	assert.NoError(t, err)
 
-	// The hook file is written with the boot disk and mounted read-only into
-	// the container; spark only reads its settings from the config file.
-	assert.Contains(t, result, "- path: /opt/metio/pre-start/spark-profiler.sh")
-	assert.Contains(t, result, "permissions: '0755'")
+	// The hook lives on the Metio data disk and is mounted read-only into the
+	// container; spark only reads its settings from the config file.
+	assert.Contains(t, result, "/mnt/disks/minecraft/pre-start/spark-profiler.sh")
 	assert.Contains(t, result, "/data/config/spark/config.json")
 	assert.Contains(t, result, `printf '{ "backgroundProfiler": false }\n' > "$cfg"`)
 	assert.Contains(t, result, "-e PRE_START_SCRIPT=/hooks/spark-profiler.sh \\")
-	assert.Contains(t, result, "-v /opt/metio/pre-start:/hooks:ro \\")
+	assert.Contains(t, result, "-v /mnt/disks/minecraft/pre-start:/hooks:ro \\")
 
-	// Parse the rendered document: the hook must land as an executable
-	// write_files entry, otherwise the image refuses to start the server.
+	// Container-Optimized OS mounts the root filesystem read-only, and
+	// cloud-init runs write_files before its mounts module attaches the data
+	// disk. The hook must therefore be created from runcmd and must never
+	// appear as a write_files entry.
 	var parsed struct {
 		WriteFiles []struct {
-			Path        string `yaml:"path"`
-			Permissions string `yaml:"permissions"`
-			Content     string `yaml:"content"`
+			Path string `yaml:"path"`
 		} `yaml:"write_files"`
+		Runcmd []string `yaml:"runcmd"`
 	}
 	assert.NoError(t, yaml.Unmarshal([]byte(result), &parsed))
-	found := false
 	for _, wf := range parsed.WriteFiles {
-		if wf.Path != "/opt/metio/pre-start/spark-profiler.sh" {
-			continue
-		}
-		found = true
-		assert.Equal(t, "0755", wf.Permissions)
-		assert.True(t, strings.HasPrefix(wf.Content, "#!/bin/sh\n"), "hook needs a shebang")
-		assert.Contains(t, wf.Content, `"backgroundProfiler": false`)
+		assert.NotEqual(t, "/mnt/disks/minecraft/pre-start/spark-profiler.sh", wf.Path)
+		assert.False(t, strings.HasPrefix(wf.Path, "/opt/"),
+			"write_files must stay off the read-only root filesystem")
+		assert.False(t, strings.HasPrefix(wf.Path, "/mnt/disks/minecraft/"),
+			"the data disk is not mounted when write_files runs")
 	}
-	assert.True(t, found, "pack servers must write the spark hook")
+
+	hookIndex, startIndex := -1, -1
+	for i, cmd := range parsed.Runcmd {
+		if strings.Contains(cmd, sparkPreStartScript) {
+			hookIndex = i
+		}
+		if strings.HasPrefix(cmd, "systemctl start minecraft") {
+			startIndex = i
+		}
+	}
+	assert.NotEqual(t, -1, hookIndex, "pack servers must create the spark hook in runcmd")
+	assert.NotEqual(t, -1, startIndex, "runcmd must start the services")
+	assert.Less(t, hookIndex, startIndex, "the hook must exist before Minecraft starts")
+
+	hook := parsed.Runcmd[hookIndex]
+	assert.Contains(t, hook, "install -d -m 0755 /mnt/disks/minecraft/pre-start")
+	assert.Contains(t, hook, "#!/bin/sh\n", "hook needs a shebang")
+	assert.Contains(t, hook, `"backgroundProfiler": false`)
+	assert.Contains(t, hook, "chmod 0755 /mnt/disks/minecraft/pre-start/spark-profiler.sh")
 }
 
 func TestRenderCloudConfig_VanillaHasNoSparkProfilerHook(t *testing.T) {
@@ -484,7 +499,7 @@ func TestRenderCloudConfig_VanillaHasNoSparkProfilerHook(t *testing.T) {
 
 	assert.NotContains(t, result, "spark-profiler")
 	assert.NotContains(t, result, "PRE_START_SCRIPT")
-	assert.NotContains(t, result, "/opt/metio/pre-start")
+	assert.NotContains(t, result, "/mnt/disks/minecraft/pre-start")
 }
 
 func TestRenderCloudConfig_VanillaStillRendersVersion(t *testing.T) {
@@ -539,8 +554,8 @@ func TestRenderCloudConfig_YAMLValid(t *testing.T) {
 			RCONPassword:        "rcon-pw",
 		},
 		{
-			// Pack servers add an extra write_files entry (the spark hook),
-			// whose block scalar must not break the surrounding YAML.
+			// Pack servers add a runcmd hook whose block scalar must not break
+			// the surrounding YAML.
 			Region:            "europe-west3",
 			MachineAgentImage: "machine-agent:latest",
 			Modpack:           &ModpackConfig{Platform: "modrinth", ProjectID: "abC123"},

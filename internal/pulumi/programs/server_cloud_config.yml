@@ -12,7 +12,7 @@ users:
     groups: docker
     system: false
 write_files:
-${restoreWriteFiles}${sparkWriteFiles}
+${restoreWriteFiles}
   - path: /etc/systemd/system/minecraft.service
     permissions: '0644'
     content: |
@@ -112,7 +112,7 @@ ${restoreWriteFiles}${sparkWriteFiles}
 runcmd:
   - id -u metio >/dev/null 2>&1 || useradd -m -s /bin/bash -g metio -G docker metio
   - mkdir -p /mnt/disks/minecraft/data /mnt/disks/minecraft/backup-manifests
-  - chmod 0777 /mnt/disks/minecraft/backup-manifests
+  - chmod 0777 /mnt/disks/minecraft/backup-manifests${sparkRuncmd}
   - systemctl daemon-reload
   - systemctl enable minecraft ${backupServiceEnable}metio-machine-agent
 ${startCommand}

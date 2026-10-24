@@ -413,6 +413,26 @@ To apply an update:
 The settings dialog's hint that the server "keeps running" during an update describes
 resizes and in-place changes; an infrastructure update replaces the machine.
 
+#### Version 10 — spark hook moved off the read-only root
+
+Container-Optimized OS mounts the root filesystem read-only. Version 9 wrote the spark
+`PRE_START_SCRIPT` hook to `/opt/metio/pre-start`, which made cloud-init's `write_files`
+module fail with `EROFS` before it wrote any systemd unit; the VM booted without
+`minecraft`, `minecraft-backup` or `metio-machine-agent`. Version 10 writes the hook to
+`/mnt/disks/minecraft/pre-start` from `runcmd`, after cloud-init has mounted the data disk.
+It sits next to `data/` so it never lands in a world backup.
+
+Migration:
+
+1. Deploy a controller running version 10 or later.
+2. Apply the infrastructure update to **every pack-driven server older than version 10**.
+   The recreate installs the hook at the new location; the data disk survives.
+3. Confirm the server reports running and the `minecraft` and `metio-machine-agent`
+   services are active.
+
+Vanilla servers render byte-identical user-data, so they need no recreate even though the
+dashboard shows the update badge.
+
 #### Version 9 — pack servers keep spark's profiler off the JVM
 
 Large modpacks (Prominence II, ArdaCraft, Better MC, …) bundle `spark` 1.10.x, whose async
@@ -434,6 +454,9 @@ Migration:
 
 Vanilla servers render byte-identical user-data, so they need no recreate even though the
 dashboard shows the update badge.
+
+Version 10 moved this hook from `/opt/metio/pre-start` to the data disk because the `/opt`
+path aborts cloud-init on Container-Optimized OS; see Version 10 above.
 
 #### Version 8 — pack servers install their pack
 
