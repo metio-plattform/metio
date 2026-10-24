@@ -39,4 +39,11 @@ package programs
 // user-data is unchanged, but every server's stored version is older than this
 // one. Pack servers created before version 9 must be recreated to pick up the
 // hook.
-const CurrentInfraVersion = 9
+// Version 10 moves the spark PRE_START_SCRIPT hook off the read-only
+// Container-Optimized OS root filesystem. Version 9 wrote it to
+// /opt/metio/pre-start from write_files, which aborts that module with EROFS
+// before any systemd unit is written, so pack servers created on version 9
+// never started. The hook now lives on the Metio data disk and is created
+// from runcmd, after cloud-init mounts the disk. Pack servers older than
+// version 10 must be recreated; vanilla user-data is unchanged.
+const CurrentInfraVersion = 10

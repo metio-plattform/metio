@@ -11,9 +11,12 @@ import (
 var cloudConfigTemplate string
 
 const (
-	// sparkPreStartHostDir lives on the boot disk (not the data disk) so the
-	// hook ships with the host's user-data and never appears in backups.
-	sparkPreStartHostDir = "/opt/metio/pre-start"
+	// sparkPreStartHostDir lives on the Metio data disk, next to data/ rather
+	// than inside it so the hook never appears in world backups. It cannot live
+	// on the boot disk: Container-Optimized OS mounts the root filesystem
+	// read-only, and cloud-init writes write_files entries before its mounts
+	// module attaches the data disk, so the hook is created from runcmd.
+	sparkPreStartHostDir = "/mnt/disks/minecraft/pre-start"
 	// sparkPreStartContainerDir is where the hook directory is mounted into
 	// the Minecraft container.
 	sparkPreStartContainerDir = "/hooks"
@@ -156,23 +159,34 @@ func RenderCloudConfig(config *TemplateConfig) (string, error) {
 	// the file must be executable, and the whole directory is mounted so a
 	// missing file cannot turn into a docker-created directory that fails the
 	// hook and blocks the server.
-	sparkWriteFiles := ""
+	//
+	// The hook is created from runcmd, not write_files: cloud-init's
+	// write-files module runs in the init stage, before its mounts module has
+	// attached the data disk, so a write_files entry would target the
+	// read-only root filesystem on Container-Optimized OS and abort the whole
+	// module. Deferred write_files entries are not an option either, because
+	// COS does not enable cc_write_files_deferred. runcmd executes after the
+	// mount and before the services start.
+	sparkRuncmd := ""
 	if config.Modpack != nil {
-		sparkWriteFiles = fmt.Sprintf(`  - path: %s/%s
-    permissions: '0755'
-    content: |
-      #!/bin/sh
-      # Keep spark's async profiler off the JVM: its native code segfaults on
-      # Temurin 25 (metio#631). /spark profiler --force-java-sampler is the
-      # safe manual profiling path.
-      set -eu
-      cfg=/data/config/spark/config.json
-      mkdir -p /data/config/spark
-      if [ -f "$cfg" ] && grep -qE '"backgroundProfiler"[[:space:]]*:[[:space:]]*false|"backgroundProfilerEngine"[[:space:]]*:[[:space:]]*"java"' "$cfg"; then
-        exit 0
-      fi
-      printf '{ "backgroundProfiler": false }\n' > "$cfg"
-`, sparkPreStartHostDir, sparkPreStartScript)
+		sparkRuncmd = fmt.Sprintf(`
+  - |
+    install -d -m 0755 %s
+    cat > %s/%s <<'SPARK_EOF'
+    #!/bin/sh
+    # Keep spark's async profiler off the JVM: its native code segfaults on
+    # Temurin 25 (metio#631). /spark profiler --force-java-sampler is the
+    # safe manual profiling path.
+    set -eu
+    cfg=/data/config/spark/config.json
+    mkdir -p /data/config/spark
+    if [ -f "$cfg" ] && grep -qE '"backgroundProfiler"[[:space:]]*:[[:space:]]*false|"backgroundProfilerEngine"[[:space:]]*:[[:space:]]*"java"' "$cfg"; then
+      exit 0
+    fi
+    printf '{ "backgroundProfiler": false }\n' > "$cfg"
+    SPARK_EOF
+    chmod 0755 %s/%s
+`, sparkPreStartHostDir, sparkPreStartHostDir, sparkPreStartScript, sparkPreStartHostDir, sparkPreStartScript)
 	}
 	startCommand := fmt.Sprintf("  - systemctl start minecraft %smetio-machine-agent", config.BackupServiceEnable)
 
@@ -199,7 +213,7 @@ func RenderCloudConfig(config *TemplateConfig) (string, error) {
 
 	replacements := map[string]string{
 		"${restoreWriteFiles}":    restoreWriteFiles,
-		"${sparkWriteFiles}":      sparkWriteFiles,
+		"${sparkRuncmd}":          sparkRuncmd,
 		"${afterRestore}":         afterRestore,
 		"${requiresRestore}":      requiresRestore,
 		"${startCommand}":         startCommand,
