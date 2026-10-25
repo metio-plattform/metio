@@ -9,14 +9,14 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"github.com/nbyl/metio/internal/config"
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/handlers/agent"
-	"github.com/nbyl/metio/internal/handlers/servers"
-	"github.com/nbyl/metio/internal/handlers/setup"
-	"github.com/nbyl/metio/internal/handlers/tasks"
-	"github.com/nbyl/metio/internal/services"
-	"github.com/nbyl/metio/static"
+	"github.com/metio-plattform/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/handlers/agent"
+	"github.com/metio-plattform/metio/internal/handlers/servers"
+	"github.com/metio-plattform/metio/internal/handlers/setup"
+	"github.com/metio-plattform/metio/internal/handlers/tasks"
+	"github.com/metio-plattform/metio/internal/services"
+	"github.com/metio-plattform/metio/static"
 )
 
 var provisioningService servers.ProvisioningServiceInterface
@@ -47,6 +47,7 @@ func New(ps servers.ProvisioningServiceInterface, vs setup.ValidationServiceInte
 	servers.ListMinecraftVersions = services.ListMinecraftVersions
 	servers.SearchModrinthPacks = services.SearchModrinthPacks
 	servers.ListModrinthPackVersions = services.ListModrinthPackVersions
+	servers.GetModrinthPack = services.GetModrinthPack
 	servers.GetUserEmail = getUserEmail
 	servers.WriteJSONError = WriteJSONError
 	if cfg != nil {

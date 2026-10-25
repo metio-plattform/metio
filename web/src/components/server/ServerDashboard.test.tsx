@@ -279,6 +279,26 @@ describe('ServerDashboard stats', () => {
     expect(screen.getByText('Uptime')).toBeInTheDocument();
     expect(screen.getByText('3h 45m')).toBeInTheDocument();
   });
+
+  it('shows a degraded warning when the server crash-loops', () => {
+    mockServerList([
+      mockServerResponse({
+        ...runningStatus,
+        players: { current: 0, max: 0 },
+        version: 'Unknown',
+        health: 'DEGRADED',
+        healthMessage: 'Minecraft restarted 3 times.',
+      }),
+    ]);
+
+    renderDashboard();
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(
+      screen.getByText('Minecraft restarted 3 times.')
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Degraded')).toHaveLength(2);
+  });
 });
 
 describe('ServerDashboard create server button', () => {

@@ -11,11 +11,11 @@ import (
 	"cloud.google.com/go/cloudtasks/apiv2"
 	"cloud.google.com/go/storage"
 	gorillahandlers "github.com/gorilla/handlers"
-	"github.com/nbyl/metio/internal/config"
-	"github.com/nbyl/metio/internal/handlers"
-	"github.com/nbyl/metio/internal/pulumi"
-	"github.com/nbyl/metio/internal/services"
-	"github.com/nbyl/metio/internal/tracing"
+	"github.com/metio-plattform/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/handlers"
+	"github.com/metio-plattform/metio/internal/pulumi"
+	"github.com/metio-plattform/metio/internal/services"
+	"github.com/metio-plattform/metio/internal/tracing"
 	"github.com/spf13/viper"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/serviceusage/v1"
@@ -113,6 +113,7 @@ func initServices() (*servicesBundle, error) {
 
 	provisioningService := services.NewProvisioningService(workspaceManager, dbConn, Version, executor, cfg.BackupDeletedServerRetentionDays)
 	provisioningService.SetSaveAckTimeout(cfg.SaveAckTimeout)
+	provisioningService.SetPackInstallTimeout(cfg.PackInstallTimeout)
 	provisioningService.SetBackupRestoreConfig(fmt.Sprintf("%s-%s-backups", cfg.ProjectID, cfg.Environment), cfg.BackupResticPassword)
 
 	suSvc, err := serviceusage.NewService(ctx)

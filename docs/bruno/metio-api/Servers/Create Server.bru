@@ -1,0 +1,29 @@
+meta {
+  name: Create Server
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/servers
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "my-server",
+    "region": "europe-west3",
+    "zone": "europe-west3-a",
+    "machineType": "e2-standard-4",
+    "minecraftVersion": "1.21.4",
+    "diskSizeGB": 50,
+    "shutdownSchedule": {
+      "enabled": false
+    }
+  }
+}
+
+docs {
+  Create a vanilla server. Returns 202 Accepted with a Location header pointing at the provisioning status. Add a `modpack` object (see "Create Server with Modpack") for a pack-driven server.
+}

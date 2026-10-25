@@ -345,6 +345,10 @@ resource "google_cloud_run_v2_service" "controller" {
         value = tostring(var.backup_deleted_server_retention_days)
       }
       env {
+        name  = "PACK_INSTALL_TIMEOUT"
+        value = var.pack_install_timeout
+      }
+      env {
         name = "BACKUP_RESTIC_PASSWORD"
         value_source {
           secret_key_ref {

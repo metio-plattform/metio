@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProvisioningProgress } from './ProvisioningProgress';
 import { useServerProvisioning } from '../../hooks/useServerProvisioning';
+import { useServerStatus } from '../../hooks/useServerStatus';
 
 const navigateMock = vi.hoisted(() => vi.fn());
 
@@ -13,6 +14,10 @@ vi.mock('react-router-dom', () => ({
 
 vi.mock('../../hooks/useServerProvisioning', () => ({
   useServerProvisioning: vi.fn(),
+}));
+
+vi.mock('../../hooks/useServerStatus', () => ({
+  useServerStatus: vi.fn(),
 }));
 
 const steps = [
@@ -53,6 +58,7 @@ beforeEach(() => {
     error: null,
     refetch: vi.fn(),
   } as never);
+  vi.mocked(useServerStatus).mockReturnValue({ data: undefined } as never);
 });
 
 describe('ProvisioningProgress', () => {
@@ -98,6 +104,58 @@ describe('ProvisioningProgress', () => {
     rerender(<ProvisioningProgress serverId="srv1" />);
     expect(screen.getByText('Failed')).toBeInTheDocument();
     expect(screen.getByText('Deployment failed')).toBeInTheDocument();
+  });
+
+  it('shows a crash-loop warning while provisioning', () => {
+    vi.mocked(useServerStatus).mockReturnValue({
+      data: {
+        serverState: 'RUNNING',
+        players: { current: 0, max: 0 },
+        uptime: '',
+        version: 'Unknown',
+        instanceIP: '',
+        health: 'DEGRADED',
+        healthMessage: 'Minecraft restarted 3 times.',
+      },
+    } as never);
+
+    renderProgress();
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(
+      screen.getByText('Minecraft restarted 3 times.')
+    ).toBeInTheDocument();
+  });
+
+  it('renders the modpack install step of a pack-driven create', () => {
+    vi.mocked(useServerProvisioning).mockReturnValue({
+      data: {
+        ...data,
+        currentStep: 'install_modpack',
+        progress: 67,
+        steps: [
+          ...steps.map((step) => ({ ...step, status: 'COMPLETED' })),
+          {
+            name: 'install_modpack',
+            status: 'IN_PROGRESS',
+            message: 'Installing modpack 1KVo5zza...',
+            timestamp: '2026-01-01T00:00:00Z',
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    } as never);
+
+    renderProgress();
+
+    expect(
+      screen.getByText('Installing modpack 1KVo5zza...')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '67'
+    );
   });
 
   it('renders the no-provisioning state and navigates home', async () => {

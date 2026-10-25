@@ -1,0 +1,18 @@
+meta {
+  name: Cancel Shutdown
+  type: http
+  seq: 2
+}
+
+delete {
+  url: {{baseUrl}}/api/servers/:id/shutdown/schedule
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+docs {
+  Cancel a pending scheduled shutdown.
+}

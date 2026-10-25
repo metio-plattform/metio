@@ -13,7 +13,7 @@ import (
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	"google.golang.org/api/iterator"
 
-	"github.com/nbyl/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/db"
 )
 
 const (

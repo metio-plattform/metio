@@ -1,0 +1,18 @@
+meta {
+  name: Get Server
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/servers/:id
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+docs {
+  Get one server, including its `modpack` configuration and infra version.
+}

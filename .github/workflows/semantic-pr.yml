@@ -3,11 +3,17 @@ name: Semantic PR
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+  # `validate` is a required status check, so it must report for merge
+  # groups too or the merge queue deadlocks (#600). Merge groups have no
+  # pull request payload to lint, so the step is skipped there.
+  merge_group:
+    types: [checks_requested]
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: amannn/action-semantic-pull-request@v6
+      - if: github.event_name != 'merge_group'
+        uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

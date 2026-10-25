@@ -1,0 +1,14 @@
+meta {
+  name: Setup Status
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/setup/status
+  auth: none
+}
+
+docs {
+  Whether the deployment is initialized, the server count, and current checks.
+}

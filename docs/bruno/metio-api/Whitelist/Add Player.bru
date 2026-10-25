@@ -1,0 +1,25 @@
+meta {
+  name: Add Player
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/servers/:id/whitelist
+  body: json
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+body:json {
+  {
+    "username": "PlayerName"
+  }
+}
+
+docs {
+  Add a player by Minecraft username (looked up against Mojang).
+}

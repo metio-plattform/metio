@@ -9,7 +9,7 @@
 #
 # The hook is a statically-linked Go binary (cmd/mc-backup/post-backup) that
 # shells out to the restic binary shipped in the base image.
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \

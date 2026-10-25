@@ -10,6 +10,19 @@ import (
 //go:embed server_cloud_config.yml
 var cloudConfigTemplate string
 
+const (
+	// sparkPreStartHostDir lives on the Metio data disk, next to data/ rather
+	// than inside it so the hook never appears in world backups. It cannot live
+	// on the boot disk: Container-Optimized OS mounts the root filesystem
+	// read-only, and cloud-init writes write_files entries before its mounts
+	// module attaches the data disk, so the hook is created from runcmd.
+	sparkPreStartHostDir = "/mnt/disks/minecraft/pre-start"
+	// sparkPreStartContainerDir is where the hook directory is mounted into
+	// the Minecraft container.
+	sparkPreStartContainerDir = "/hooks"
+	sparkPreStartScript       = "spark-profiler.sh"
+)
+
 type TemplateConfig struct {
 	Region               string
 	GCPProject           string
@@ -133,24 +146,74 @@ func RenderCloudConfig(config *TemplateConfig) (string, error) {
 			config.BackupBucket, sourcePrefix, config.ResticPassword,
 			config.BackupImage, config.RestoreSnapshotID, config.RestoreSnapshotID)
 	}
+	// Pack servers: spark 1.10.x bundles async-profiler, whose native code
+	// segfaults on the Temurin 25 image the platform pins (metio#631), so the
+	// server crash-loops before it ever answers RCON. The 1.10 line reads its
+	// settings only from config/spark/config.json (environment variables and
+	// system properties arrived after 1.10.53), so the file has to be written.
+	//
+	// The write happens in the image's PRE_START_SCRIPT hook rather than from
+	// the host: container setup installs or re-syncs the pack (including its
+	// overrides) after the container starts, so a file written before docker
+	// run can be replaced by pack content. Hook scripts execute directly, so
+	// the file must be executable, and the whole directory is mounted so a
+	// missing file cannot turn into a docker-created directory that fails the
+	// hook and blocks the server.
+	//
+	// The hook is created from runcmd, not write_files: cloud-init's
+	// write-files module runs in the init stage, before its mounts module has
+	// attached the data disk, so a write_files entry would target the
+	// read-only root filesystem on Container-Optimized OS and abort the whole
+	// module. Deferred write_files entries are not an option either, because
+	// COS does not enable cc_write_files_deferred. runcmd executes after the
+	// mount and before the services start.
+	sparkRuncmd := ""
+	if config.Modpack != nil {
+		sparkRuncmd = fmt.Sprintf(`
+  - |
+    install -d -m 0755 %s
+    cat > %s/%s <<'SPARK_EOF'
+    #!/bin/sh
+    # Keep spark's async profiler off the JVM: its native code segfaults on
+    # Temurin 25 (metio#631). /spark profiler --force-java-sampler is the
+    # safe manual profiling path.
+    set -eu
+    cfg=/data/config/spark/config.json
+    mkdir -p /data/config/spark
+    if [ -f "$cfg" ] && grep -qE '"backgroundProfiler"[[:space:]]*:[[:space:]]*false|"backgroundProfilerEngine"[[:space:]]*:[[:space:]]*"java"' "$cfg"; then
+      exit 0
+    fi
+    printf '{ "backgroundProfiler": false }\n' > "$cfg"
+    SPARK_EOF
+    chmod 0755 %s/%s
+`, sparkPreStartHostDir, sparkPreStartHostDir, sparkPreStartScript, sparkPreStartHostDir, sparkPreStartScript)
+	}
 	startCommand := fmt.Sprintf("  - systemctl start minecraft %smetio-machine-agent", config.BackupServiceEnable)
 
 	// The Minecraft unit identifies what to run either by vanilla version or by
 	// Modrinth pack (ADR-0006). A pack-driven server omits VERSION entirely and
 	// passes the pack, plus its pinned version when one was chosen; the image
 	// then resolves loader, Minecraft version and mods from the pack manifest.
+	//
+	// TYPE must be set to MODRINTH: the image only treats MODRINTH_MODPACK as a
+	// modpack when the server type (or MODPACK_PLATFORM) says so, and otherwise
+	// keeps its VANILLA default and boots unmodded.
+	//
 	// The multi-line form keeps the systemd line-continuation backslashes
 	// consistent with the surrounding ExecStart block.
 	minecraftArgs := fmt.Sprintf("-e VERSION=%s \\", config.MinecraftVersion)
 	if config.Modpack != nil {
-		minecraftArgs = fmt.Sprintf("-e MODRINTH_MODPACK=%s \\", config.Modpack.ProjectID)
+		minecraftArgs = fmt.Sprintf("-e TYPE=MODRINTH \\\n        -e MODRINTH_MODPACK=%s \\", config.Modpack.ProjectID)
 		if config.Modpack.VersionID != "" {
 			minecraftArgs += fmt.Sprintf("\n        -e MODRINTH_VERSION=%s \\", config.Modpack.VersionID)
 		}
+		minecraftArgs += fmt.Sprintf("\n        -e PRE_START_SCRIPT=%s/%s \\", sparkPreStartContainerDir, sparkPreStartScript)
+		minecraftArgs += fmt.Sprintf("\n        -v %s:%s:ro \\", sparkPreStartHostDir, sparkPreStartContainerDir)
 	}
 
 	replacements := map[string]string{
 		"${restoreWriteFiles}":    restoreWriteFiles,
+		"${sparkRuncmd}":          sparkRuncmd,
 		"${afterRestore}":         afterRestore,
 		"${requiresRestore}":      requiresRestore,
 		"${startCommand}":         startCommand,

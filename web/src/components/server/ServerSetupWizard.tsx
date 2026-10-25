@@ -10,6 +10,7 @@ import {
   Cpu,
   FileText,
   Loader2,
+  Package,
   Server,
   Settings,
 } from 'lucide-react';
@@ -35,7 +36,9 @@ import {
 } from '../ui/Select';
 import { Switch } from '../ui/Switch';
 import { cn } from '../../lib/utils';
-import type { MachineTypeOption } from '../../types/server';
+import { ModpackPicker } from './ModpackPicker';
+import { modpackSummary } from '../../lib/modpack';
+import type { MachineTypeOption, ModpackConfig } from '../../types/server';
 
 export interface ServerSetupWizardProps {
   className?: string;
@@ -43,33 +46,59 @@ export interface ServerSetupWizardProps {
 
 const serverNamePattern = /^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z][a-z0-9]$|^[a-z]$/;
 
-const wizardSchema = z.object({
-  name: z
-    .string()
-    .min(1, 'Server name is required')
-    .min(3, 'Name must be between 3 and 24 characters')
-    .max(24, 'Name must be between 3 and 24 characters')
-    .regex(
-      serverNamePattern,
-      'Name must start with a letter and contain only lowercase letters, digits, and hyphens'
-    ),
-  region: z.string().min(1, 'Region is required'),
-  zone: z.string().min(1, 'Zone is required'),
-  machineType: z.string().min(1, 'Machine type is required'),
-  minecraftVersion: z.string().min(1, 'Minecraft version is required'),
-  diskSizeGB: z.number().min(10).max(100),
-  shutdownEnabled: z.boolean(),
-  shutdownTime: z.string(),
-  shutdownTimezone: z.string(),
-});
+const modpackSchema = z
+  .object({
+    platform: z.literal('modrinth'),
+    projectId: z.string().min(1),
+    name: z.string().min(1),
+    iconUrl: z.string().optional(),
+    loader: z.string().optional(),
+    versionId: z.string().optional(),
+    versionName: z.string().optional(),
+  })
+  .nullable();
+
+const wizardSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1, 'Server name is required')
+      .min(3, 'Name must be between 3 and 24 characters')
+      .max(24, 'Name must be between 3 and 24 characters')
+      .regex(
+        serverNamePattern,
+        'Name must start with a letter and contain only lowercase letters, digits, and hyphens'
+      ),
+    region: z.string().min(1, 'Region is required'),
+    zone: z.string().min(1, 'Zone is required'),
+    machineType: z.string().min(1, 'Machine type is required'),
+    minecraftVersion: z.string(),
+    diskSizeGB: z.number().min(10).max(100),
+    shutdownEnabled: z.boolean(),
+    shutdownTime: z.string(),
+    shutdownTimezone: z.string(),
+    modpack: modpackSchema,
+  })
+  .superRefine((values, ctx) => {
+    // A pack controls the Minecraft version (ADR-0006); only vanilla servers
+    // must choose one.
+    if (!values.modpack && !values.minecraftVersion) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['minecraftVersion'],
+        message: 'Minecraft version is required',
+      });
+    }
+  });
 
 type WizardForm = z.infer<typeof wizardSchema>;
 
 const STEPS = [
   { id: 0, label: 'Basic Info', icon: Server },
-  { id: 1, label: 'Server Specs', icon: Cpu },
-  { id: 2, label: 'Settings', icon: Settings },
-  { id: 3, label: 'Review', icon: FileText },
+  { id: 1, label: 'Modpack', icon: Package },
+  { id: 2, label: 'Server Specs', icon: Cpu },
+  { id: 3, label: 'Settings', icon: Settings },
+  { id: 4, label: 'Review', icon: FileText },
 ];
 
 const TIMEZONES = [
@@ -109,11 +138,13 @@ const INITIAL_FORM: WizardForm = {
   shutdownEnabled: false,
   shutdownTime: '21:00',
   shutdownTimezone: 'Europe/Berlin',
+  modpack: null,
 };
 
 const DEFAULT_FAMILIES = ['e2-', 'n2-'];
 const STEP_FIELDS: (keyof WizardForm)[][] = [
   ['name', 'region', 'zone'],
+  ['modpack'],
   ['machineType', 'minecraftVersion'],
   [],
   [],
@@ -211,6 +242,36 @@ function BasicInfoStep({
   );
 }
 
+function ModpackStep({
+  form,
+}: {
+  form: ReturnType<typeof useForm<WizardForm>>;
+}) {
+  const selected = form.watch('modpack');
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <p className="font-medium text-foreground">Server Type</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Install a published Modrinth modpack, or skip this step for a vanilla
+          server.
+        </p>
+      </div>
+
+      <ModpackPicker
+        value={selected}
+        onChange={(next) => {
+          form.setValue('modpack', next, { shouldDirty: true });
+          // A pack controls the Minecraft version (ADR-0006), so drop any
+          // earlier vanilla pick to keep the two fields mutually exclusive.
+          if (next) form.setValue('minecraftVersion', '');
+        }}
+      />
+    </div>
+  );
+}
+
 function SpecsStep({
   form,
   machineTypes,
@@ -222,6 +283,7 @@ function SpecsStep({
 }) {
   const [showAllMachineTypes, setShowAllMachineTypes] = useState(false);
   const selectedType = form.watch('machineType');
+  const selectedPack = form.watch('modpack');
   const isDefaultFamily = (id: string) =>
     DEFAULT_FAMILIES.some((family) => id.startsWith(family));
   const visibleMachineTypes = showAllMachineTypes
@@ -295,10 +357,20 @@ function SpecsStep({
         render={({ field }) => (
           <FormItem>
             <FormLabel>Minecraft Version</FormLabel>
-            <Select value={field.value} onValueChange={field.onChange}>
+            <Select
+              value={field.value}
+              onValueChange={field.onChange}
+              disabled={Boolean(selectedPack)}
+            >
               <FormControl>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a version" />
+                  <SelectValue
+                    placeholder={
+                      selectedPack
+                        ? 'Controlled by modpack'
+                        : 'Select a version'
+                    }
+                  />
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
@@ -309,6 +381,11 @@ function SpecsStep({
                 ))}
               </SelectContent>
             </Select>
+            {selectedPack ? (
+              <p className="text-sm text-muted-foreground">
+                Controlled by the selected modpack ({selectedPack.name}).
+              </p>
+            ) : null}
             <FormMessage />
           </FormItem>
         )}
@@ -451,7 +528,14 @@ function ReviewStep({
           ],
         ]
       : []),
-    ['Minecraft Version', values.minecraftVersion],
+    [
+      'Modpack',
+      values.modpack ? modpackSummary(values.modpack) : 'Vanilla (no pack)',
+    ],
+    [
+      'Minecraft Version',
+      values.modpack ? 'Pack-controlled' : values.minecraftVersion,
+    ],
     ['Disk Size', `${values.diskSizeGB} GB`],
     [
       'Scheduled Shutdown',
@@ -494,14 +578,23 @@ export function ServerSetupWizard({ className }: ServerSetupWizardProps) {
   };
 
   const handleCreate = form.handleSubmit((values) => {
+    const modpack: ModpackConfig | undefined = values.modpack
+      ? {
+          platform: values.modpack.platform,
+          projectId: values.modpack.projectId,
+          versionId: values.modpack.versionId,
+        }
+      : undefined;
+
     createServer.mutate(
       {
         name: values.name,
         region: values.region,
         zone: values.zone,
         machineType: values.machineType,
-        minecraftVersion: values.minecraftVersion,
+        minecraftVersion: values.modpack ? '' : values.minecraftVersion,
         diskSizeGB: values.diskSizeGB,
+        ...(modpack ? { modpack } : {}),
         ...(values.shutdownEnabled
           ? {
               shutdownSchedule: {
@@ -606,15 +699,16 @@ export function ServerSetupWizard({ className }: ServerSetupWizardProps) {
             {step === 0 && (
               <BasicInfoStep form={form} regions={options.regions} />
             )}
-            {step === 1 && (
+            {step === 1 && <ModpackStep form={form} />}
+            {step === 2 && (
               <SpecsStep
                 form={form}
                 machineTypes={options.machineTypes}
                 minecraftVersions={options.minecraftVersions}
               />
             )}
-            {step === 2 && <OptionsStep form={form} />}
-            {step === 3 && (
+            {step === 3 && <OptionsStep form={form} />}
+            {step === 4 && (
               <ReviewStep
                 values={form.getValues()}
                 machineTypes={options.machineTypes}

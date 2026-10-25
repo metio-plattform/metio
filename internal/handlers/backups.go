@@ -9,7 +9,7 @@ import (
 	"net/http"
 
 	"cloud.google.com/go/storage"
-	"github.com/nbyl/metio/internal/services"
+	"github.com/metio-plattform/metio/internal/services"
 	"go.opentelemetry.io/otel"
 )
 

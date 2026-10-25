@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
-	"github.com/nbyl/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/db"
 	"github.com/spf13/viper"
 )
 
@@ -32,6 +32,7 @@ type Config struct {
 	BackupResticPassword             string
 	BackupDeletedServerRetentionDays int
 	SaveAckTimeout                   time.Duration
+	PackInstallTimeout               time.Duration
 }
 
 // Default values for configuration
@@ -40,6 +41,7 @@ const (
 	DefaultRegion                           = "us-central1"
 	DefaultBackupDeletedServerRetentionDays = 30
 	DefaultSaveAckTimeout                   = 3 * time.Minute
+	DefaultPackInstallTimeout               = 20 * time.Minute
 )
 
 // Load reads configuration from environment variables via viper.
@@ -94,6 +96,16 @@ func Load() (Config, error) {
 		saveAckTimeout = d
 	}
 	cfg.SaveAckTimeout = saveAckTimeout
+
+	packInstallTimeout := DefaultPackInstallTimeout
+	if raw := viper.GetString("PACK_INSTALL_TIMEOUT"); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 {
+			return Config{}, fmt.Errorf("PACK_INSTALL_TIMEOUT must be a positive duration, got %q", raw)
+		}
+		packInstallTimeout = d
+	}
+	cfg.PackInstallTimeout = packInstallTimeout
 
 	if cfg.MachineAgentImage == "" {
 		log.Print("MACHINE_AGENT_IMAGE is not set")

@@ -122,6 +122,57 @@ func TestRenderCloudConfig_DiskLayoutAndManifestMount(t *testing.T) {
 	assert.Contains(t, result, "-v /mnt/disks/minecraft/data:/data")
 }
 
+func TestRenderCloudConfig_MetioUserNoHardcodedUID(t *testing.T) {
+	cfg := &TemplateConfig{
+		Region:              "europe-west3",
+		MachineAgentImage:   "europe-west3-docker.pkg.dev/minecraftbyl/metio/machine-agent:tag",
+		BackupBucket:        "my-project-development-backups",
+		ServerID:            "0dcbaca4-2a26-489c-b4a3-d2fad8bb6483",
+		BackupRetentionDays: 90,
+		ResticPassword:      "deployment-wide-restic-password",
+		RCONPassword:        "rcon-password",
+	}
+	result, err := RenderCloudConfig(cfg)
+	assert.NoError(t, err)
+
+	// UID 1000 collides with COS's `chronos` stub account; the user must be
+	// auto-allocated so cloud-init can create it.
+	assert.NotContains(t, result, "uid: 1000")
+
+	// Only the one users entry must render; nothing else may pin a uid.
+	var parsed map[string]interface{}
+	assert.NoError(t, yaml.Unmarshal([]byte(result), &parsed))
+	users, ok := parsed["users"].([]interface{})
+	assert.True(t, ok, "users must be a list")
+	assert.Len(t, users, 1)
+	user, ok := users[0].(map[string]interface{})
+	assert.True(t, ok, "user entry must be a map")
+	assert.NotContains(t, user, "uid", "the metio user must not pin a UID")
+}
+
+func TestRenderCloudConfig_MetioUserGuardBeforeStart(t *testing.T) {
+	cfg := &TemplateConfig{
+		Region:              "europe-west3",
+		MachineAgentImage:   "europe-west3-docker.pkg.dev/minecraftbyl/metio/machine-agent:tag",
+		BackupBucket:        "my-project-development-backups",
+		ServerID:            "0dcbaca4-2a26-489c-b4a3-d2fad8bb6483",
+		BackupRetentionDays: 90,
+		ResticPassword:      "deployment-wide-restic-password",
+		RCONPassword:        "rcon-password",
+		BackupServiceEnable: "minecraft-backup ",
+	}
+	result, err := RenderCloudConfig(cfg)
+	assert.NoError(t, err)
+
+	// The id/useradd guard must run before systemctl starts any User=metio
+	// unit so a failed user creation cannot silently take down all services.
+	guardIdx := strings.Index(result, "id -u metio >/dev/null 2>&1 || useradd")
+	startIdx := strings.Index(result, "systemctl start minecraft")
+	assert.True(t, guardIdx >= 0, "runcmd must contain the metio user guard")
+	assert.True(t, startIdx >= 0, "runcmd must start services")
+	assert.True(t, guardIdx < startIdx, "metio user guard must precede service start")
+}
+
 func TestRenderCloudConfig_BackupOverrides(t *testing.T) {
 	cfg := &TemplateConfig{
 		Region:               "europe-west3",
@@ -349,6 +400,9 @@ func TestRenderCloudConfig_ModpackLatest(t *testing.T) {
 	result, err := RenderCloudConfig(cfg)
 	assert.NoError(t, err)
 
+	// TYPE=MODRINTH is what makes the image install the pack: with the default
+	// TYPE=VANILLA it would silently boot an unmodded server.
+	assert.Contains(t, result, "-e TYPE=MODRINTH \\")
 	assert.Contains(t, result, "-e MODRINTH_MODPACK=abC123 \\")
 	assert.NotContains(t, result, "MODRINTH_VERSION")
 	assert.NotContains(t, result, "-e VERSION=")
@@ -365,9 +419,87 @@ func TestRenderCloudConfig_ModpackPinned(t *testing.T) {
 	result, err := RenderCloudConfig(cfg)
 	assert.NoError(t, err)
 
+	assert.Contains(t, result, "-e TYPE=MODRINTH \\")
 	assert.Contains(t, result, "-e MODRINTH_MODPACK=abC123 \\")
 	assert.Contains(t, result, "-e MODRINTH_VERSION=XyZ789 \\")
 	assert.NotContains(t, result, "-e VERSION=")
+}
+
+func TestRenderCloudConfig_ModpackDisablesSparkProfiler(t *testing.T) {
+	// spark 1.10.x's async-profiler segfaults on the pinned Java 25 image
+	// (metio#631). Pack servers get a PRE_START_SCRIPT hook that writes the
+	// spark config after the pack install and before the JVM starts.
+	cfg := &TemplateConfig{
+		Region:            "europe-west3",
+		MachineAgentImage: "europe-west3-docker.pkg.dev/minecraftbyl/metio/machine-agent:tag",
+		MinecraftVersion:  "",
+		Modpack:           &ModpackConfig{Platform: "modrinth", ProjectID: "abC123"},
+		RCONPassword:      "rcon-pw",
+	}
+	result, err := RenderCloudConfig(cfg)
+	assert.NoError(t, err)
+
+	// The hook lives on the Metio data disk and is mounted read-only into the
+	// container; spark only reads its settings from the config file.
+	assert.Contains(t, result, "/mnt/disks/minecraft/pre-start/spark-profiler.sh")
+	assert.Contains(t, result, "/data/config/spark/config.json")
+	assert.Contains(t, result, `printf '{ "backgroundProfiler": false }\n' > "$cfg"`)
+	assert.Contains(t, result, "-e PRE_START_SCRIPT=/hooks/spark-profiler.sh \\")
+	assert.Contains(t, result, "-v /mnt/disks/minecraft/pre-start:/hooks:ro \\")
+
+	// Container-Optimized OS mounts the root filesystem read-only, and
+	// cloud-init runs write_files before its mounts module attaches the data
+	// disk. The hook must therefore be created from runcmd and must never
+	// appear as a write_files entry.
+	var parsed struct {
+		WriteFiles []struct {
+			Path string `yaml:"path"`
+		} `yaml:"write_files"`
+		Runcmd []string `yaml:"runcmd"`
+	}
+	assert.NoError(t, yaml.Unmarshal([]byte(result), &parsed))
+	for _, wf := range parsed.WriteFiles {
+		assert.NotEqual(t, "/mnt/disks/minecraft/pre-start/spark-profiler.sh", wf.Path)
+		assert.False(t, strings.HasPrefix(wf.Path, "/opt/"),
+			"write_files must stay off the read-only root filesystem")
+		assert.False(t, strings.HasPrefix(wf.Path, "/mnt/disks/minecraft/"),
+			"the data disk is not mounted when write_files runs")
+	}
+
+	hookIndex, startIndex := -1, -1
+	for i, cmd := range parsed.Runcmd {
+		if strings.Contains(cmd, sparkPreStartScript) {
+			hookIndex = i
+		}
+		if strings.HasPrefix(cmd, "systemctl start minecraft") {
+			startIndex = i
+		}
+	}
+	assert.NotEqual(t, -1, hookIndex, "pack servers must create the spark hook in runcmd")
+	assert.NotEqual(t, -1, startIndex, "runcmd must start the services")
+	assert.Less(t, hookIndex, startIndex, "the hook must exist before Minecraft starts")
+
+	hook := parsed.Runcmd[hookIndex]
+	assert.Contains(t, hook, "install -d -m 0755 /mnt/disks/minecraft/pre-start")
+	assert.Contains(t, hook, "#!/bin/sh\n", "hook needs a shebang")
+	assert.Contains(t, hook, `"backgroundProfiler": false`)
+	assert.Contains(t, hook, "chmod 0755 /mnt/disks/minecraft/pre-start/spark-profiler.sh")
+}
+
+func TestRenderCloudConfig_VanillaHasNoSparkProfilerHook(t *testing.T) {
+	// Vanilla servers never bundle spark, so their user-data stays unchanged.
+	cfg := &TemplateConfig{
+		Region:            "europe-west3",
+		MachineAgentImage: "europe-west3-docker.pkg.dev/minecraftbyl/metio/machine-agent:tag",
+		MinecraftVersion:  "1.21.1",
+		RCONPassword:      "rcon-pw",
+	}
+	result, err := RenderCloudConfig(cfg)
+	assert.NoError(t, err)
+
+	assert.NotContains(t, result, "spark-profiler")
+	assert.NotContains(t, result, "PRE_START_SCRIPT")
+	assert.NotContains(t, result, "/mnt/disks/minecraft/pre-start")
 }
 
 func TestRenderCloudConfig_VanillaStillRendersVersion(t *testing.T) {
@@ -382,6 +514,7 @@ func TestRenderCloudConfig_VanillaStillRendersVersion(t *testing.T) {
 
 	assert.Contains(t, result, "-e VERSION=1.21.1 \\")
 	assert.NotContains(t, result, "MODRINTH_MODPACK")
+	assert.NotContains(t, result, "TYPE=MODRINTH")
 }
 
 func TestRenderCloudConfig_YAMLValid(t *testing.T) {
@@ -419,6 +552,14 @@ func TestRenderCloudConfig_YAMLValid(t *testing.T) {
 			MachineAgentImage:   "machine-agent:latest",
 			BackupServiceEnable: "minecraft-backup ",
 			RCONPassword:        "rcon-pw",
+		},
+		{
+			// Pack servers add a runcmd hook whose block scalar must not break
+			// the surrounding YAML.
+			Region:            "europe-west3",
+			MachineAgentImage: "machine-agent:latest",
+			Modpack:           &ModpackConfig{Platform: "modrinth", ProjectID: "abC123"},
+			RCONPassword:      "rcon-pw",
 		},
 	}
 	for _, cfg := range tests {

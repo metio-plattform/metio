@@ -1,0 +1,18 @@
+meta {
+  name: Get Provisioning Status
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/servers/:id/provisioning
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+docs {
+  Poll the provisioning status (the Location header of create/update/delete responses). Pack-driven servers add an `install_modpack` step between `deploy_infrastructure` and readiness.
+}

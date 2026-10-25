@@ -54,7 +54,7 @@ gcloud services enable \
 
 ### GitHub Container Registry
 
-Images are published to `ghcr.io/nbyl/metio`. Ensure you are authenticated:
+Images are published to `ghcr.io/metio-plattform/metio`. Ensure you are authenticated:
 
 ```bash
 echo $GITHUB_TOKEN | docker login ghcr.io -u <your-username> --password-stdin
@@ -81,6 +81,13 @@ postgres_mode = "cloudsql" # or "byo"
 ```
 
 The `admin_users` variable controls who can log in to the Metio dashboard. Multiple users can be comma-separated.
+
+Optional variables are documented inline in `metio.auto.tfvars.sample`. One that matters for
+modded servers is `pack_install_timeout` (default `"20m"`), the window in which the controller
+waits for a pack-driven server to finish installing its pack on first boot. Exceeding it is
+not fatal — the VM keeps installing — but the provisioning view stops following the step. It
+must stay below the 30-minute controller operation timeout. See
+[Modpacks](MODPACKS.md) for when to raise it.
 
 ### PostgreSQL State Backend
 
@@ -186,7 +193,7 @@ You can include the Metio infrastructure module in your own OpenTofu configurati
 
 ```hcl
 module "metio" {
-  source = "github.com/nbyl/metio//deploy/modules/gcp-cloud-run"
+  source = "github.com/metio-plattform/metio//deploy/modules/gcp-cloud-run"
 
   project_id          = var.project_id
   region              = var.region
@@ -246,8 +253,8 @@ Alternatively, build and push a specific tag:
 ```bash
 docker buildx build --platform linux/amd64 \
   -f cmd/controller/Dockerfile \
-  -t ghcr.io/nbyl/metio/controller:<tag> .
-docker push ghcr.io/nbyl/metio/controller:<tag>
+  -t ghcr.io/metio-plattform/metio/controller:<tag> .
+docker push ghcr.io/metio-plattform/metio/controller:<tag>
 ```
 
 Deploy the image to Cloud Run:
@@ -346,15 +353,17 @@ You can also bypass the wizard by setting the `PULUMI_STATE_BUCKET` environment 
 1. After setup, click **Create Server** or navigate to `/servers/new`
 2. Configure the server:
    - **Server Name**: A unique identifier (e.g., "my-survival-world")
-   - **Minecraft Version**: The server version to run (e.g., "1.21.4")
-   - **Machine Type**: GCE instance type (e.g., `e2-small`, `e2-standard-2`)
+   - **Modpack** (optional): pick a published Modrinth pack and, optionally, pin a pack version. A pack controls the Minecraft version, loader and mods, so the version field is disabled while one is selected. See [Modpacks](MODPACKS.md).
+   - **Minecraft Version**: The server version to run (e.g., "1.21.4"); only for vanilla servers
+   - **Machine Type**: GCE instance type (e.g., `e2-small`, `e2-standard-2`). Pack servers want a larger machine: the JVM heap is 75% of RAM.
    - **Region/Zone**: Pre-filled from your infrastructure config
 3. Click **Create** to start provisioning
 
 The provisioning process:
 1. **Upserts a Pulumi stack** in the state bucket
 2. **Deploys infrastructure**: GCE VM, boot disk, service account, firewall rules, IAM bindings, backup bucket
-3. **Reports progress** via the provisioning status in the state store (polled by the frontend every 2 seconds)
+3. **Installs the modpack** (pack-driven servers only): the container downloads the pack and its mods, then starts the server. This is waited on for up to `pack_install_timeout` (default 20 minutes) and is not fatal if the window elapses.
+4. **Reports progress** via the provisioning status in the state store (polled by the frontend every 2 seconds)
 
 The VM boots with the machine-agent as the startup command, which connects back to the controller to report status.
 
@@ -364,16 +373,126 @@ When editing a server (via the dashboard or API), you can change:
 
 | Setting | Description |
 |---------|-------------|
-| `minecraft_version` | Minecraft server version (e.g., `1.21.4`) |
+| `minecraft_version` | Minecraft server version (e.g., `1.21.4`). Must be empty when a modpack is set — the pack controls the version |
+| `modpack` | Modrinth pack the server boots with: `{"platform": "modrinth", "projectId": "...", "versionId": "..."}`. `versionId` is optional (latest when omitted). On update, omit the field to keep the current pack, send `null` to remove it (and set `minecraft_version`), or send an object to change it. See [Modpacks](MODPACKS.md) |
 | `machine_type` | GCE instance type (e.g., `e2-medium`, `e2-standard-4`) |
 | `desired_status` | `RUNNING` or `TERMINATED` |
 | `rcon_password` | Password for RCON (in-game administration) |
 | `whitelist` | List of allowed Minecraft player usernames |
 
+The JVM heap is sized from the machine type: `MAX_MEMORY=75%` makes it 75% of the VM's RAM,
+which is why pack servers should not be sized down to a small machine. See
+[Modpacks](MODPACKS.md#sizing-a-pack-server).
+
 Some changes trigger different update types:
-- **In-place** (version, RCON password): Updates the server config, machine-agent picks up the change
+- **In-place** (RCON password): Updates the server config, machine-agent picks up the change
 - **Resize** (machine type): Stops the VM, changes the machine type, restarts
 - **Recreate** (image changes): Destroys and recreates the VM
+- **Recreate** (modpack change or removal): The pack is part of `metadata.user-data`, so changing or removing it recreates the VM. World and player data live on the persistent data disk and survive; backups are unaffected
+- **Recreate** (infra version bump): Changes to `internal/pulumi/programs/server_cloud_config.yml` bump `CurrentInfraVersion`, which rewrites `metadata.user-data`. Existing VMs are recreated with the new cloud-config; the dashboard shows an **"Update Available"** badge until the action is applied. See [Infrastructure Version Migrations](#infrastructure-version-migrations)
+
+### Infrastructure Version Migrations
+
+`internal/pulumi/programs/version.go` holds `CurrentInfraVersion`. Any change to the VM's
+`user-data` bumps it, and Pulumi is configured to replace the instance whenever
+`metadata.user-data` changes. The dashboard therefore shows an **Infrastructure Update
+Available** badge on every server whose stored version is older than the controller's.
+
+To apply an update:
+
+1. Upgrade the controller (and the machine-agent image, if it changed) by redeploying.
+2. Open the server's **Settings** dialog. The banner shows the server's infra version and the
+   target version.
+3. Submit the dialog. No configuration change is required — the existing values are sent
+   back. `PUT /api/servers/{id}` with the current configuration does the same thing.
+4. The provisioning page shows the update as it runs. **The VM is recreated**: expect a
+   rebuild plus first boot, and for pack servers a full modpack install. The persistent data
+   disk is detached and reattached, so worlds, player data and backups survive.
+5. Once the server reports running, confirm it came up as expected.
+
+The settings dialog's hint that the server "keeps running" during an update describes
+resizes and in-place changes; an infrastructure update replaces the machine.
+
+#### Version 10 — spark hook moved off the read-only root
+
+Container-Optimized OS mounts the root filesystem read-only. Version 9 wrote the spark
+`PRE_START_SCRIPT` hook to `/opt/metio/pre-start`, which made cloud-init's `write_files`
+module fail with `EROFS` before it wrote any systemd unit; the VM booted without
+`minecraft`, `minecraft-backup` or `metio-machine-agent`. Version 10 writes the hook to
+`/mnt/disks/minecraft/pre-start` from `runcmd`, after cloud-init has mounted the data disk.
+It sits next to `data/` so it never lands in a world backup.
+
+Migration:
+
+1. Deploy a controller running version 10 or later.
+2. Apply the infrastructure update to **every pack-driven server older than version 10**.
+   The recreate installs the hook at the new location; the data disk survives.
+3. Confirm the server reports running and the `minecraft` and `metio-machine-agent`
+   services are active.
+
+Vanilla servers render byte-identical user-data, so they need no recreate even though the
+dashboard shows the update badge.
+
+#### Version 9 — pack servers keep spark's profiler off the JVM
+
+Large modpacks (Prominence II, ArdaCraft, Better MC, …) bundle `spark` 1.10.x, whose async
+profiler segfaults on the Java 25 image and crash-loops the server before it answers RCON.
+Version 9 writes a `PRE_START_SCRIPT` hook onto pack servers. The hook runs after the pack
+install and just before the JVM starts, and disables spark's background profiler
+(`config/spark/config.json`: `{"backgroundProfiler": false}`). Because the image installs or
+re-syncs pack overrides during setup, the file is written from inside the container rather
+than from the host.
+
+Migration:
+
+1. Deploy a controller running version 9 or later.
+2. Apply the infrastructure update to **every pack-driven server** created before that
+   deployment. The recreate installs the hook; the data disk (world, mods, backups) survives.
+3. After the recreate, watch the `install_modpack` step and confirm the server reports its
+   Minecraft version instead of staying at `Unknown`. Manual profiling on the server must use
+   `/spark profiler --force-java-sampler`; spark's default engine is the crashing one.
+
+Vanilla servers render byte-identical user-data, so they need no recreate even though the
+dashboard shows the update badge.
+
+Version 10 moved this hook from `/opt/metio/pre-start` to the data disk because the `/opt`
+path aborts cloud-init on Container-Optimized OS; see Version 10 above.
+
+#### Version 8 — pack servers install their pack
+
+Servers created from a modpack on infrastructure version 6 or 7 ran the Minecraft container
+without `TYPE=MODRINTH`. The image then kept its `VANILLA` default, so those servers booted
+unmodded even though a modpack was configured. Version 8 passes `TYPE=MODRINTH` together with
+`MODRINTH_MODPACK` (and `MODRINTH_VERSION` when a version is pinned).
+
+Migration:
+
+1. Deploy a controller running version 8 or later.
+2. Apply the infrastructure update to **every pack-driven server** created before that
+   deployment. Vanilla servers need no action.
+3. After the recreate, the pack installs on first boot. Watch for the `install_modpack`
+   provisioning step, then verify the pack loaded: the Modpack tab, or the `mods` directory
+   under `/mnt/disks/minecraft/data` on the VM.
+
+#### Version 7 — provisioning on Container-Optimized OS
+
+Fixed a UID collision: the `metio` user was hardcoded to UID 1000, which COS already assigns
+to its `chronos` stub account, so cloud-init provisioning failed. Applying the update is all
+that is needed; no data migration.
+
+#### Version 5 — JVM heap from the machine type
+
+Replaced the hardcoded `MAX_MEMORY=3G` with `MAX_MEMORY=75%` so the heap scales with the
+machine type. Applying the update recreates the VM; the machine type, world and configuration
+are unchanged.
+
+#### Version 4 — data disk relayout (historical, breaking)
+
+The data disk mount moved from `/mnt/disks/minecraft/data` to `/mnt/disks/minecraft`, with
+the world now in `/mnt/disks/minecraft/data` and backup manifests in
+`/mnt/disks/minecraft/backup-manifests`. Deployments still on version 3 or earlier had to
+move the existing world into the new layout **before** applying the recreate. Current
+deployments start at the current version and never encounter this migration.
 
 ## Operations Guide
 
@@ -588,7 +707,7 @@ to new/updated servers.
 Metio includes GitHub Actions CI/CD (`.github/workflows/ci.yml`) for automated builds:
 
 1. The workflow runs tests (Go + frontend) on every push and PR to `main`
-2. On `main` merges, it builds and pushes Docker images to `ghcr.io/nbyl/metio`
+2. On `main` merges, it builds and pushes Docker images to `ghcr.io/metio-plattform/metio`
 3. Images are tagged with the git SHA
 4. Use `make promote FROM=<sha> TO=main` to retag images for deployment
 

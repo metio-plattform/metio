@@ -90,7 +90,7 @@ is seeded automatically from `devcontainer.env.example`.
 
 **Limitations in Codespaces:**
 - The seeded env file contains `TBD` placeholders for `GCP_PROJECT`, `GCP_ZONE`,
-  `INSTANCE_NAME`, `ALLOWED_USERS`, and the Google OAuth credentials. Building,
+ `ALLOWED_USERS`, and the Google OAuth credentials. Building,
   running the Go and frontend test suites, and the Vite dev server all work; Google
   OAuth login and anything touching GCP (Datastore, Compute Engine, `make deploy`)
   does not until you supply real values.
@@ -242,6 +242,8 @@ metio/
 │           └── outputs.tf
 ├── docs/                     # Documentation
 │   ├── DEPLOYMENT.md         # Production deployment guide
+│   ├── MODPACKS.md           # Modpack user guide
+│   ├── bruno/metio-api/      # API collection (Bruno)
 │   └── insomnia/             # API collection (Insomnia)
 ├── static/dist/              # Built frontend (go:embed)
 └── Makefile                  # Build, test, deploy targets
@@ -456,12 +458,22 @@ refactor: extract status polling into custom hook
      --body "Closes <TICKET-ID>\n\n<summary of changes>"
    ```
 2. **Move the issue to "In Review"** on the Kanban board after creating the PR
-3. **Squash merge** the PR (`gh pr merge --auto --squash`) — squash is the only merge method enabled
+3. **Queue the PR for merge** (`gh pr merge --auto --squash`) — merges to `main` go
+   through the merge queue; direct merges are blocked. Auto-merge adds the PR to the
+   queue as soon as the required checks pass. Entries are processed strictly
+   sequentially (one PR is validated and merged at a time), in the order they were
+   queued. A failing required check blocks the queue until it is fixed or the PR is
+   removed from the queue.
+   - **Inspect the queue:** the PR shows a "Queued for merge" state on its
+     conversation page (Settings → Branches shows the queue configuration).
+   - **Leave the queue:** disable auto-merge on the PR, or close it.
+   - **Manual trigger:** if the queue is idle but an entry has not been merged yet,
+     use the "Queue for merge" / retry controls on the PR.
 4. **Enable delete branch** in the PR to ensure the branch is deleted on merge
 
 ### Merge Strategy
 
-**All pull requests must be squash merged.** Merge commits and rebase merges are disabled at the repository level:
+**All pull requests are squash merged through the merge queue.** Merge commits and rebase merges are disabled at the repository level:
 
 | Setting | Value |
 |---------|-------|
@@ -470,6 +482,8 @@ refactor: extract status polling into custom hook
 | `allow_rebase_merge` | `false` |
 | `squash_merge_commit_title` | `PR_TITLE` |
 | `squash_merge_commit_message` | `PR_BODY` |
+| ruleset `merge_queue.merge_method` | `SQUASH` |
+| ruleset `pull_request.allowed_merge_methods` | `["squash"]` |
 
 **Why:** release-please builds the changelog by parsing commit messages. With merge commits enabled, GitHub wrote the conventional PR title into the merge commit's body, so release-please counted both the merge commit *and* the original branch commit — producing two changelog entries for every change. Release-please has no option to ignore merge commits, so squash merging is what prevents this. Squashing guarantees exactly one commit on `main` per pull request, and therefore exactly one changelog entry.
 
@@ -496,12 +510,19 @@ Two consequences follow from the settings above:
 
 ### CI/CD Pipeline
 
-On every push and pull request to `main`, GitHub Actions runs (`.github/workflows/ci.yml`):
+On every push, pull request, and merge group targeting `main`, GitHub Actions runs (`.github/workflows/ci.yml`):
 
-| Job | Jobs | Trigger |
+| Job | What it runs | Trigger |
 |-----|------|---------|
 | Test | `go test`, `web test`, `lint` | Always |
 | Docker | Build + push to ghcr.io | On `main` merge only |
+
+The `merge_group` trigger (`types: [checks_requested]`) is what makes the required
+status checks (`test`, `validate`, `docker`) report for merge groups — without it,
+every pull request added to the merge queue would wait forever and the queue would
+never merge anything. The same trigger is declared in `semantic-pr.yml`, whose
+`validate` job is a required check as well; it no-ops for merge groups because
+there is no pull request title to lint.
 
 Images are tagged with git SHA. Non-`main` tags are cleaned by ghcr.io retention policy (3 days).
 
@@ -513,7 +534,7 @@ make promote FROM=<sha> TO=main
 
 ### Release rollover
 
-Every issue that is part of an upcoming release carries a `release/<version>` label (e.g. `release/v2.1.0`). A GitHub Actions workflow (`.github/workflows/sync-release-labels.yml`) mirrors that label into the single-select **Target release** field of the [Metio Development project](https://github.com/users/nbyl/projects/7): the option name equals the label name minus the `release/` prefix.
+Every issue that is part of an upcoming release carries a `release/<version>` label (e.g. `release/v2.1.0`). A GitHub Actions workflow (`.github/workflows/sync-release-labels.yml`) mirrors that label into the single-select **Target release** field of the [Metio Development project](https://github.com/orgs/metio-plattform/projects/1): the option name equals the label name minus the `release/` prefix.
 
 - Exactly one `release/*` label sets the field; removing the last one clears it.
 - Two or more `release/*` labels fail the workflow loudly and leave the field untouched.
@@ -540,7 +561,7 @@ After release-please publishes version `X.Y.Z`:
 
 ### Bug Reports
 
-Submit bug reports via [GitHub Issues](https://github.com/nbyl/metio/issues). Include:
+Submit bug reports via [GitHub Issues](https://github.com/metio-plattform/metio/issues). Include:
 
 - Steps to reproduce
 - Expected vs actual behavior
@@ -549,7 +570,7 @@ Submit bug reports via [GitHub Issues](https://github.com/nbyl/metio/issues). In
 
 ### Feature Requests
 
-Open a [GitHub Issue](https://github.com/nbyl/metio/issues/new) with the `enhancement` label. Describe the problem you're solving and any potential implementation ideas.
+Open a [GitHub Issue](https://github.com/metio-plattform/metio/issues/new) with the `enhancement` label. Describe the problem you're solving and any potential implementation ideas.
 
 ### Documentation Improvements
 
@@ -572,4 +593,4 @@ Please note that this project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md)
 
 - **GitHub Issues**: Use for bug reports and feature requests
 - **GitHub Discussions**: For questions, ideas, and community support (coming soon)
-- **Issue search**: Check existing [issues](https://github.com/nbyl/metio/issues) before opening a new one
+- **Issue search**: Check existing [issues](https://github.com/metio-plattform/metio/issues) before opening a new one

@@ -84,6 +84,12 @@ variable "backup_deleted_server_retention_days" {
   }
 }
 
+variable "pack_install_timeout" {
+  description = "How long the controller waits for a pack-driven server's first boot (modpack download and install) before the install_modpack provisioning step gives up. Must stay below the controller operation timeout (30m)."
+  type        = string
+  default     = "20m"
+}
+
 variable "backup_cleanup_schedule" {
   description = "Cloud Scheduler cron expression driving the controller's backup cleanup sweep (POST /api/backups/cleanup, ADR-0004)."
   type        = string

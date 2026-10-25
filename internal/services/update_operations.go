@@ -9,7 +9,7 @@ import (
 
 	compute "cloud.google.com/go/compute/apiv1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
-	"github.com/nbyl/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/db"
 )
 
 // stopInstanceFn and startInstanceFn are function variables for testability.
@@ -171,4 +171,72 @@ func WaitForServerHealthy(ctx context.Context, dbConn db.DB, instanceName string
 	}
 
 	return fmt.Errorf("timeout waiting for server %s to become healthy after %v", instanceName, timeout)
+}
+
+// unknownMinecraftVersion is what the machine-agent reports while the Minecraft
+// server cannot answer its RCON version query.
+const unknownMinecraftVersion = "Unknown"
+
+// modpackInstallPollInterval is a variable so tests can shorten it.
+var modpackInstallPollInterval = 10 * time.Second
+
+// WaitForModpackInstall polls the machine-agent status of a pack-driven server
+// until it reports a fresh, reachable server, or until the timeout elapses.
+//
+// A status document older than notBefore belongs to a previous VM (for example
+// the one the recreate replaced) and is ignored. A running container alone is
+// not enough: the itzg image runs the container while it still downloads and
+// installs the modpack, so the server must have answered RCON, which only
+// happens after the pack is installed and the server finished starting.
+func WaitForModpackInstall(ctx context.Context, dbConn db.DB, instanceName string, notBefore time.Time, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		status, err := dbConn.GetStatus(ctx, instanceName)
+		switch {
+		case err != nil:
+			log.Printf("Error polling server status for %s: %v", instanceName, err)
+		case modpackInstallReady(status, notBefore):
+			log.Printf("Modpack install on %s finished (version: %s)", instanceName, status.Version)
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(modpackInstallPollInterval):
+		}
+	}
+
+	return fmt.Errorf("timeout waiting for modpack install on %s after %v", instanceName, timeout)
+}
+
+// modpackInstallReady reports whether a machine-agent status proves that the
+// modpack is installed and the Minecraft server is reachable. The status must
+// be newer than notBefore so that the status of the VM a recreate replaced
+// cannot be mistaken for the new one.
+func modpackInstallReady(status db.Status, notBefore time.Time) bool {
+	if !status.Timestamp.After(notBefore) || !status.ServerState.IsRunning() {
+		return false
+	}
+
+	// An answered RCON player count is the version-independent proof that the
+	// server finished starting: the container runs while the pack is still
+	// being installed, and Minecraft only reports a maximum player count once
+	// it accepts RCON commands.
+	if status.Players.Max > 0 {
+		return true
+	}
+
+	// The known version is a fallback for status reports that carry a version
+	// but no player count. It cannot be the only signal: Minecraft grew a
+	// `version` command only in later releases, so packs on older versions
+	// (1.20.1 and below) never report one.
+	return status.Version != "" && status.Version != unknownMinecraftVersion
 }

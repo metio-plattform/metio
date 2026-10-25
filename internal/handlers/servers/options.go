@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/nbyl/metio/internal/services"
+	"github.com/metio-plattform/metio/internal/services"
 )
 
 type MachineTypeOption struct {

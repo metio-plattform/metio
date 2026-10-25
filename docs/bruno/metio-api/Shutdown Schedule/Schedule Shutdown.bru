@@ -1,0 +1,25 @@
+meta {
+  name: Schedule Shutdown
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/servers/:id/shutdown/schedule
+  body: json
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+body:json {
+  {
+    "shutdownTime": "2026-01-01T22:00:00Z"
+  }
+}
+
+docs {
+  Schedule a one-off shutdown. The machine-agent warns players in-game before stopping the VM.
+}

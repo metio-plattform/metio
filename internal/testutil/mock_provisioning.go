@@ -3,8 +3,8 @@ package testutil
 import (
 	"context"
 
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/pulumi/programs"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/pulumi/programs"
 	"github.com/stretchr/testify/mock"
 )
 

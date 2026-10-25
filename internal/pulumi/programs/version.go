@@ -16,7 +16,34 @@ package programs
 // machine types, so machine-type changes remain a resize rather than a
 // recreate.
 //
+// Version 7 fixes provisioning on Container-Optimized OS: the hardcoded
+// UID 1000 for the `metio` user collided with COS's `chronos` stub account
+// (UID 1000), so cloud-init could not create the user and every systemd
+// unit failed with `217/USER`. The user is now auto-allocated; a runcmd
+// guard ensures `metio` exists before any unit starts. Existing servers
+// must be recreated to pick up the corrected user-data.
+//
 // Version 6 adds modpack support (ADR-0006): a pack-driven server passes
 // MODRINTH_MODPACK instead of VERSION, and the Minecraft version becomes
 // pack-controlled. Those servers deploy with an empty minecraftVersion.
-const CurrentInfraVersion = 6
+//
+// Version 8 fixes pack-driven servers that booted unmodded: the Modrinth
+// modpack install requires TYPE=MODRINTH, and setting only MODRINTH_MODPACK
+// left the image's VANILLA default in place. Pack servers built on version 6
+// or 7 must be recreated to pick up the corrected user-data.
+//
+// Version 9 keeps spark's background profiler off pack servers: spark 1.10.x
+// bundles async-profiler, whose native code segfaults on the Java 25 image and
+// crash-loops the server (metio#631). Pack servers gain a PRE_START_SCRIPT
+// hook that writes config/spark/config.json before the JVM starts; vanilla
+// user-data is unchanged, but every server's stored version is older than this
+// one. Pack servers created before version 9 must be recreated to pick up the
+// hook.
+// Version 10 moves the spark PRE_START_SCRIPT hook off the read-only
+// Container-Optimized OS root filesystem. Version 9 wrote it to
+// /opt/metio/pre-start from write_files, which aborts that module with EROFS
+// before any systemd unit is written, so pack servers created on version 9
+// never started. The hook now lives on the Metio data disk and is created
+// from runcmd, after cloud-init mounts the disk. Pack servers older than
+// version 10 must be recreated; vanilla user-data is unchanged.
+const CurrentInfraVersion = 10

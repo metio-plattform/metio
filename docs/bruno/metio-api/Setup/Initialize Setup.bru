@@ -1,0 +1,14 @@
+meta {
+  name: Initialize Setup
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/setup/initialize
+  auth: none
+}
+
+docs {
+  Run first-run initialization (Pulumi state bucket, settings persistence).
+}

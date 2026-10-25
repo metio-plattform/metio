@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/nbyl/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/config"
 )
 
 var (

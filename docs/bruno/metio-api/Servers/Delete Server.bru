@@ -1,0 +1,18 @@
+meta {
+  name: Delete Server
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{baseUrl}}/api/servers/:id
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+docs {
+  Destroy the server. World backups are retained for the configured retention period.
+}

@@ -1,0 +1,18 @@
+meta {
+  name: Update Machine Agent
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/servers/:id/update-agent
+  auth: none
+}
+
+params:path {
+  id: your-server-id
+}
+
+docs {
+  Recreate the VM with the controller current machine-agent image when `outdatedMachineAgent` is true.
+}

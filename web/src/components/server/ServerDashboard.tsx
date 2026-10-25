@@ -66,6 +66,7 @@ import {
 } from '../ui/Collapsible';
 import { StatsGrid, type StatItem } from '../layout/StatsGrid';
 import { ServerConfigPanel } from './ServerConfigPanel';
+import { ServerHealthWarning } from './ServerHealthWarning';
 import { UpdateModal } from './UpdateModal';
 import { DestroyModal } from './DestroyModal';
 import { EmptyState } from './EmptyState';
@@ -82,10 +83,16 @@ export interface ServerDashboardProps {
   className?: string;
 }
 
-function getStatusBadgeVariant(state: ServerState): {
+function getStatusBadgeVariant(
+  state: ServerState,
+  degraded = false
+): {
   variant: 'default' | 'destructive' | 'secondary';
   className?: string;
 } {
+  if (degraded) {
+    return { variant: 'destructive' };
+  }
   switch (state) {
     case 'RUNNING':
       return { variant: 'default', className: 'bg-green-600 text-white' };
@@ -494,12 +501,15 @@ function ServerCard({ server }: ServerCardProps) {
   const isTransitioning =
     currentStatus?.serverState === 'STARTING' ||
     currentStatus?.serverState === 'STOPPING';
+  const isDegraded = currentStatus?.health === 'DEGRADED';
 
   const stats: StatItem[] = [
     {
       label: 'State',
       value: currentStatus
-        ? getStatusLabel(currentStatus.serverState)
+        ? isDegraded
+          ? 'Degraded'
+          : getStatusLabel(currentStatus.serverState)
         : 'Unknown',
     },
     ...(isRunning
@@ -572,8 +582,15 @@ function ServerCard({ server }: ServerCardProps) {
           </span>
           <span className="flex items-center gap-2">
             {currentStatus?.serverState ? (
-              <Badge {...getStatusBadgeVariant(currentStatus.serverState)}>
-                {getStatusLabel(currentStatus.serverState)}
+              <Badge
+                {...getStatusBadgeVariant(
+                  currentStatus.serverState,
+                  isDegraded
+                )}
+              >
+                {isDegraded
+                  ? 'Degraded'
+                  : getStatusLabel(currentStatus.serverState)}
               </Badge>
             ) : (
               <Badge variant="destructive">Unknown</Badge>
@@ -590,6 +607,7 @@ function ServerCard({ server }: ServerCardProps) {
       </CardHeader>
 
       <CardContent>
+        <ServerHealthWarning status={currentStatus} className="mb-4" />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div>
             <StatsGrid stats={stats} />
@@ -752,6 +770,7 @@ function ServerCard({ server }: ServerCardProps) {
           setShowUpdate(false);
         }}
         isPending={updateMutation.isPending}
+        isRunning={isRunning}
       />
       <DestroyModal
         open={showDestroy}

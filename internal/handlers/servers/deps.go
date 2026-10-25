@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/nbyl/metio/internal/config"
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/services"
+	"github.com/metio-plattform/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/services"
 )
 
 var GetDBConnection func(ctx context.Context) (db.DB, config.Config, error)
@@ -73,6 +73,13 @@ var SearchModrinthPacks = func(ctx context.Context, query, mcVersion string) []s
 // service in production.
 var ListModrinthPackVersions = func(ctx context.Context, modpackID string) []services.ModrinthVersion {
 	return []services.ModrinthVersion{}
+}
+
+// GetModrinthPack returns a single modpack by project id. It defaults to
+// "not found" so tests and any caller that has not wired the live service still
+// behave; base.go overrides it with the Modrinth-backed service in production.
+var GetModrinthPack = func(ctx context.Context, modpackID string) (services.ModrinthPack, bool) {
+	return services.ModrinthPack{}, false
 }
 
 var ControllerVersion string

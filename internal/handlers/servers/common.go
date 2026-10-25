@@ -1,16 +1,18 @@
 package servers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	compute "cloud.google.com/go/compute/apiv1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
-	"github.com/nbyl/metio/internal/config"
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/pulumi/programs"
+	"github.com/metio-plattform/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/pulumi/programs"
 )
 
 type ProvisioningServiceInterface interface {
@@ -65,6 +67,43 @@ type UpdateServerRequest struct {
 	// absent (leave unchanged), null (remove the pack, bare field present) and
 	// an object (set a pack). setting a pack clears the Minecraft version.
 	Modpack **db.ModpackConfig `json:"modpack,omitempty"`
+}
+
+// UnmarshalJSON decodes the request while preserving the distinction between an
+// absent modpack field and an explicit JSON null. encoding/json cannot express
+// that with a **T field: it sets the outer pointer to nil for null, which is
+// the same state as "not provided". Without this a pack could never be removed
+// (ADR-0006).
+func (r *UpdateServerRequest) UnmarshalJSON(data []byte) error {
+	type alias UpdateServerRequest
+	aux := struct {
+		*alias
+		Modpack json.RawMessage `json:"modpack"`
+	}{alias: (*alias)(r)}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	switch {
+	case aux.Modpack == nil:
+		// Field absent: leave the pack untouched.
+		r.Modpack = nil
+	case string(bytes.TrimSpace(aux.Modpack)) == "null":
+		// Field present but null: remove the pack. crud.go recognises this as a
+		// non-nil outer pointer whose inner pointer is nil.
+		var none *db.ModpackConfig
+		r.Modpack = &none
+	default:
+		var pack db.ModpackConfig
+		if err := json.Unmarshal(aux.Modpack, &pack); err != nil {
+			return fmt.Errorf("invalid modpack: %w", err)
+		}
+		set := &pack
+		r.Modpack = &set
+	}
+
+	return nil
 }
 
 // BackupSettings is the wire representation of a server's backup override.
@@ -187,6 +226,10 @@ type StatusResponse struct {
 	WhitelistEnabled  bool        `json:"whitelistEnabled"`
 	ScheduledShutdown *string     `json:"scheduledShutdown,omitempty"`
 	AgentVersion      string      `json:"agentVersion,omitempty"`
+	Health            string      `json:"health,omitempty"`
+	HealthMessage     string      `json:"healthMessage,omitempty"`
+	RestartCount      int         `json:"restartCount,omitempty"`
+	LastRestartAt     string      `json:"lastRestartAt,omitempty"`
 }
 
 type PlayersJSON struct {

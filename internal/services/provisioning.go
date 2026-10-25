@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nbyl/metio/internal/config"
-	"github.com/nbyl/metio/internal/db"
-	"github.com/nbyl/metio/internal/pulumi"
-	"github.com/nbyl/metio/internal/pulumi/programs"
+	"github.com/metio-plattform/metio/internal/config"
+	"github.com/metio-plattform/metio/internal/db"
+	"github.com/metio-plattform/metio/internal/pulumi"
+	"github.com/metio-plattform/metio/internal/pulumi/programs"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 )
 
@@ -26,6 +26,7 @@ const (
 	stepSaveWorld            = "save_world"
 	stepRestoreWorld         = "restore_world"
 	stepHealthCheck          = "health_check"
+	stepInstallModpack       = "install_modpack"
 )
 
 const (
@@ -52,6 +53,7 @@ type ProvisioningService struct {
 	backupRetentionDays  int
 	restoreAckTimeout    time.Duration
 	saveAckTimeout       time.Duration
+	packInstallTimeout   time.Duration
 	backupBucket         string
 	backupResticPassword string
 }
@@ -72,12 +74,23 @@ func NewProvisioningService(workspaceManager pulumi.WorkspaceManagerInterface, d
 		backupRetentionDays: backupRetentionDays,
 		restoreAckTimeout:   30 * time.Minute,
 		saveAckTimeout:      config.DefaultSaveAckTimeout,
+		packInstallTimeout:  config.DefaultPackInstallTimeout,
 	}
 }
 
 func (s *ProvisioningService) SetSaveAckTimeout(d time.Duration) {
 	if d > 0 {
 		s.saveAckTimeout = d
+	}
+}
+
+// SetPackInstallTimeout configures how long the controller waits for a
+// pack-driven server's first boot (which downloads and installs the modpack)
+// before the install_modpack provisioning step gives up. Exceeding it is not
+// fatal: the VM keeps installing and the dashboard reflects the real state.
+func (s *ProvisioningService) SetPackInstallTimeout(d time.Duration) {
+	if d > 0 {
+		s.packInstallTimeout = d
 	}
 }
 
@@ -223,10 +236,24 @@ func (s *ProvisioningService) runCreate(opCtx context.Context, status *db.Provis
 		log.Printf("[%s] Failed to cancel stale stack (non-fatal): %v", serverID, err)
 	}
 
-	status.Steps = []db.ProvisioningStep{
+	steps := []db.ProvisioningStep{
 		{Name: stepUpsertStack, Status: db.ProvisioningStatePending, Message: "Preparing Pulumi stack...", Timestamp: time.Now()},
 		{Name: stepDeployInfrastructure, Status: db.ProvisioningStatePending, Message: "Deploying infrastructure with Pulumi...", Timestamp: time.Now()},
 	}
+	// A pack-driven server downloads and installs the modpack inside the
+	// Minecraft container during its first boot, long after the infrastructure
+	// exists. Report that period as an explicit step instead of leaving it
+	// invisible (a long first boot would otherwise look like a completed create
+	// followed by a hang).
+	if config.Modpack != nil {
+		steps = append(steps, db.ProvisioningStep{
+			Name:      stepInstallModpack,
+			Status:    db.ProvisioningStatePending,
+			Message:   "Installing modpack...",
+			Timestamp: time.Now(),
+		})
+	}
+	status.Steps = steps
 	s.updateStatus(opCtx, serverID, status)
 
 	// Adopt a pre-existing address on create only. Updates must never re-import
@@ -257,6 +284,12 @@ func (s *ProvisioningService) runCreate(opCtx context.Context, status *db.Provis
 
 	if err := s.stampServerConfig(opCtx, serverID); err != nil {
 		return s.handleError(status, opCtx, serverID, stepDeployInfrastructure, err)
+	}
+
+	if config.Modpack != nil {
+		if err := s.waitForModpackInstall(opCtx, status, serverID, config); err != nil {
+			return err
+		}
 	}
 
 	outputs := make(map[string]string)
@@ -325,10 +358,23 @@ func (s *ProvisioningService) runResizeUpdate(opCtx context.Context, status *db.
 }
 
 func (s *ProvisioningService) runRecreateUpdate(opCtx context.Context, status *db.ProvisioningStatus, serverID string, config *programs.ServerConfig) error {
-	status.Steps = []db.ProvisioningStep{
+	steps := []db.ProvisioningStep{
 		{Name: stepSaveWorld, Status: db.ProvisioningStatePending, Message: "Saving world data...", Timestamp: time.Now()},
 		{Name: stepUpsertStack, Status: db.ProvisioningStatePending, Message: "Updating infrastructure...", Timestamp: time.Now()},
 	}
+	// Changing a pack recreates the VM, and a pack-driven server then downloads
+	// and installs the pack again on first boot. Surface that period as an
+	// explicit step. Removing a pack results in a plain vanilla boot and gets no
+	// install step.
+	if config.Modpack != nil {
+		steps = append(steps, db.ProvisioningStep{
+			Name:      stepInstallModpack,
+			Status:    db.ProvisioningStatePending,
+			Message:   "Installing modpack...",
+			Timestamp: time.Now(),
+		})
+	}
+	status.Steps = steps
 	s.updateStatus(opCtx, serverID, status)
 
 	s.updateStep(opCtx, status, serverID, stepSaveWorld, "Saving world data...")
@@ -345,6 +391,12 @@ func (s *ProvisioningService) runRecreateUpdate(opCtx context.Context, status *d
 
 	if err := s.runPulumiUpdate(opCtx, status, serverID, config); err != nil {
 		return err
+	}
+
+	if config.Modpack != nil {
+		if err := s.waitForModpackInstall(opCtx, status, serverID, config); err != nil {
+			return err
+		}
 	}
 
 	s.updateStep(opCtx, status, serverID, stepHealthCheck, "Waiting for server to become healthy...")
@@ -452,13 +504,27 @@ func (s *ProvisioningService) runDestroy(opCtx context.Context, status *db.Provi
 				Modpack:          config.Modpack,
 			}
 		}
-		retentionUntil := time.Now().AddDate(0, 0, s.backupRetentionDays)
-		if err := s.db.MarkServerBackupsDeleted(opCtx, serverID, sourceConfig, time.Now(), retentionUntil); err != nil {
+		// One timestamp feeds both the deletion mark and the deadline, so the
+		// deadline can never precede the moment it is measured from.
+		now := time.Now()
+		retentionUntil := backupRetentionDeadline(now, s.backupRetentionDays)
+		if err := s.db.MarkServerBackupsDeleted(opCtx, serverID, sourceConfig, now, retentionUntil); err != nil {
 			log.Printf("Failed to mark backups deleted for %s: %v", serverID, err)
 		}
 	}
 
 	return nil
+}
+
+// backupRetentionDeadline is the moment at which the backups of a destroyed
+// server stop being retained: the same wall-clock time, retentionDays later.
+// AddDate is deliberate calendar arithmetic — ADR-0004 specifies days, not a
+// fixed number of hours — so a span that crosses a daylight-saving transition
+// is 30d+1h or 30d-1h in absolute time (30m from a half-hour zone such as Lord
+// Howe). Cleanup compares absolute instants, so this only affects when the
+// sweep starts, not whether it is correct.
+func backupRetentionDeadline(now time.Time, retentionDays int) time.Time {
+	return now.AddDate(0, 0, retentionDays)
 }
 
 // ExecuteOperation runs a provisioning operation inline (bypassing the executor).
@@ -606,6 +672,34 @@ func (s *ProvisioningService) stampServerConfig(ctx context.Context, serverID st
 	return nil
 }
 
+// waitForModpackInstall reports the modpack installation of a pack-driven
+// server as a provisioning step and waits until the server actually answers
+// RCON, which (for the itzg image) only happens once the pack has been
+// downloaded and installed and the Minecraft server finished starting.
+//
+// The wait is non-fatal: a slow or failed install must not fail the whole
+// operation, because the VM keeps installing on its own and the dashboard
+// reflects the real state once the server is up. Only cancellation of the
+// operation itself is propagated.
+func (s *ProvisioningService) waitForModpackInstall(ctx context.Context, status *db.ProvisioningStatus, serverID string, config *programs.ServerConfig) error {
+	s.updateStep(ctx, status, serverID, stepInstallModpack,
+		fmt.Sprintf("Installing modpack %s...", config.Modpack.ProjectID))
+
+	notBefore := time.Now()
+	if err := WaitForModpackInstall(ctx, s.db, config.Name, notBefore, s.packInstallTimeout); err != nil {
+		if ctx.Err() != nil {
+			return s.handleError(status, ctx, serverID, stepInstallModpack, err)
+		}
+		log.Printf("Warning: modpack install for server %s not confirmed: %v", serverID, err)
+		s.completeStepWithMessage(ctx, status, serverID, stepInstallModpack,
+			"Not confirmed: the server did not answer RCON. Check the server status and log.")
+		return nil
+	}
+	s.completeStep(ctx, status, serverID, stepInstallModpack)
+
+	return nil
+}
+
 func (s *ProvisioningService) updateStatus(ctx context.Context, serverID string, status *db.ProvisioningStatus) {
 	if err := s.db.UpdateProvisioningStatus(ctx, serverID, status); err != nil {
 		log.Printf("Failed to update provisioning status: %v", err)
@@ -627,18 +721,22 @@ func (s *ProvisioningService) updateStep(ctx context.Context, status *db.Provisi
 }
 
 func (s *ProvisioningService) completeStep(ctx context.Context, status *db.ProvisioningStatus, serverID, stepName string) {
+	s.completeStepWithMessage(ctx, status, serverID, stepName, "Completed")
+}
+
+func (s *ProvisioningService) completeStepWithMessage(ctx context.Context, status *db.ProvisioningStatus, serverID, stepName, message string) {
 	now := time.Now()
 	for i, step := range status.Steps {
 		if step.Name == stepName {
 			status.Steps[i].Status = db.ProvisioningStateCompleted
-			status.Steps[i].Message = "Completed"
+			status.Steps[i].Message = message
 			status.Steps[i].Timestamp = now
 			break
 		}
 	}
 	status.CurrentStep = stepName
 	s.updateStatus(ctx, serverID, status)
-	log.Printf("[%s] Completed step: %s", serverID, stepName)
+	log.Printf("[%s] Completed step: %s - %s", serverID, stepName, message)
 }
 
 func (s *ProvisioningService) handleError(status *db.ProvisioningStatus, ctx context.Context, serverID, stepName string, err error) error {

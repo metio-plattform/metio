@@ -52,6 +52,21 @@ type searchResponse struct {
 	Hits []searchHit `json:"hits"`
 }
 
+// project is the subset of a Modrinth project (GET /project/{id}) that we
+// consume. Modrinth only exposes the owning team's ID here, so a single-project
+// lookup carries no author name.
+type project struct {
+	ID           string   `json:"id"`
+	Slug         string   `json:"slug"`
+	Title        string   `json:"title"`
+	ProjectType  string   `json:"project_type"`
+	Categories   []string `json:"categories"`
+	Loaders      []string `json:"loaders"`
+	GameVersions []string `json:"game_versions"`
+	Downloads    int64    `json:"downloads"`
+	IconURL      string   `json:"icon_url"`
+}
+
 // modrinthVersion is the subset of a project version that we consume.
 type modrinthVersion struct {
 	ID            string   `json:"id"`
@@ -275,6 +290,66 @@ func loaderOf(categories []string) string {
 	return ""
 }
 
+// Pack returns the modpack identified by projectID, for resolving the name and
+// icon of a pack a server already has installed.
+//
+// It reports false when Modrinth cannot be reached or does not list the
+// project; callers must fall back to the stored identifiers rather than fail,
+// mirroring Search and Versions.
+func (s *ModrinthService) Pack(ctx context.Context, projectID string) (ModrinthPack, bool) {
+	pack, err := s.fetchProject(ctx, projectID)
+	if err != nil {
+		log.Printf("Failed to fetch Modrinth project %s (%s): %v", projectID, s.baseURL, err)
+		return ModrinthPack{}, false
+	}
+	return pack, true
+}
+
+// fetchProject retrieves a single project and normalises it onto ModrinthPack.
+func (s *ModrinthService) fetchProject(ctx context.Context, projectID string) (ModrinthPack, error) {
+	projectURL := s.baseURL + "/project/" + url.PathEscape(projectID)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", projectURL, nil)
+	if err != nil {
+		return ModrinthPack{}, fmt.Errorf("failed to create request for %s: %w", projectURL, err)
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return ModrinthPack{}, fmt.Errorf("failed to make request to %s: %w", projectURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ModrinthPack{}, fmt.Errorf("unexpected status code from Modrinth project: %d (url %s)", resp.StatusCode, projectURL)
+	}
+
+	var raw project
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return ModrinthPack{}, fmt.Errorf("failed to decode project from %s: %w", projectURL, err)
+	}
+
+	loader := loaderOf(raw.Categories)
+	if loader == "" && len(raw.Loaders) > 0 {
+		loader = raw.Loaders[0]
+	}
+
+	gameVersions := raw.GameVersions
+	if gameVersions == nil {
+		gameVersions = []string{}
+	}
+
+	return ModrinthPack{
+		ID:           raw.ID,
+		Slug:         raw.Slug,
+		Name:         raw.Title,
+		IconURL:      raw.IconURL,
+		Downloads:    raw.Downloads,
+		GameVersions: gameVersions,
+		Loader:       loader,
+	}, nil
+}
+
 // fetchVersions retrieves the published versions of projectID. Changelogs are
 // skipped because the listing does not need them.
 func (s *ModrinthService) fetchVersions(ctx context.Context, projectID string) ([]ModrinthVersion, error) {
@@ -331,4 +406,10 @@ var SearchModrinthPacks = func(ctx context.Context, query, mcVersion string) []M
 // the default service.
 var ListModrinthPackVersions = func(ctx context.Context, projectID string) []ModrinthVersion {
 	return defaultModrinthService.Versions(ctx, projectID)
+}
+
+// GetModrinthPack returns the modpack identified by projectID, using the
+// default service. The boolean reports whether Modrinth could resolve it.
+var GetModrinthPack = func(ctx context.Context, projectID string) (ModrinthPack, bool) {
+	return defaultModrinthService.Pack(ctx, projectID)
 }

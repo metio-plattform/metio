@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/devcontainers/go:2-1.26
+FROM mcr.microsoft.com/devcontainers/go:2-1.27
 
 RUN for i in 1 2 3; do \
         go install github.com/air-verse/air@v1.62.0 && break || sleep 5; \
@@ -11,7 +11,7 @@ RUN DAPR_VERSION=1.16.5 && \
     install /tmp/dapr /usr/local/bin/dapr && \
     rm -f /tmp/dapr.tar.gz /tmp/dapr
 
-RUN curl -fsSL https://opencode.ai/install | VERSION=1.18.27 bash && \
+RUN curl -fsSL https://opencode.ai/v2/install | VERSION=2.0.29 bash && \
     cp /root/.opencode/bin/opencode /usr/local/bin/opencode && \
     chmod 755 /usr/local/bin/opencode
 
@@ -32,6 +32,16 @@ RUN TOFU_VERSION=${TOFU_VERSION:-1.12.6} && \
     unzip -qo /tmp/tofu.zip -d /tmp/tofu && \
     install /tmp/tofu/tofu /usr/local/bin/tofu && \
     rm -rf /tmp/tofu.zip /tmp/tofu
+
+# pre-commit in an isolated venv: Debian's system Python is PEP 668
+# externally-managed, so plain `pip install` (used by the upstream
+# pre-commit devcontainer feature) fails on Debian-owned packages.
+RUN apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends python3-venv && \
+    python3 -m venv /opt/pre-commit && \
+    /opt/pre-commit/bin/pip install --no-cache-dir pre-commit && \
+    ln -sf /opt/pre-commit/bin/pre-commit /usr/local/bin/pre-commit && \
+    rm -rf /var/lib/apt/lists/*
 
 # Give vscode user access to Go module cache and Docker socket
 RUN chmod -R g+w /go/pkg/mod && \

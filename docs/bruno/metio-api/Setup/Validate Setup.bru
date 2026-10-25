@@ -1,0 +1,14 @@
+meta {
+  name: Validate Setup
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/setup/validate
+  auth: none
+}
+
+docs {
+  Run GCP readiness checks (APIs enabled, permissions, Pulumi state bucket).
+}
