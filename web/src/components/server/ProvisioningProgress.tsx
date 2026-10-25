@@ -10,9 +10,11 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useServerProvisioning } from '../../hooks/useServerProvisioning';
+import { useServerStatus } from '../../hooks/useServerStatus';
 import type { ProvisioningStep } from '../../types/server';
 import { Progress } from '../ui/Progress';
 import { Button } from '../ui/Button';
+import { ServerHealthWarning } from './ServerHealthWarning';
 
 interface ProvisioningProgressProps {
   serverId: string;
@@ -92,6 +94,7 @@ export function ProvisioningProgress({
   const location = useLocation();
   const { data, isLoading, isError, error, refetch } =
     useServerProvisioning(serverId);
+  const { data: serverStatus } = useServerStatus(serverId);
   const [elapsed, setElapsed] = useState('0:00');
 
   const serverName =
@@ -224,6 +227,8 @@ export function ProvisioningProgress({
               <span>{elapsed}</span>
             </div>
           </div>
+
+          <ServerHealthWarning status={serverStatus} />
 
           <StepList steps={data.steps} />
 

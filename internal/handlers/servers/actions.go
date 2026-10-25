@@ -348,6 +348,13 @@ func StatusByID(w http.ResponseWriter, r *http.Request) {
 		scheduledShutdown = &formatted
 	}
 
+	now := time.Now()
+	health, healthMessage := statusHealth(playerStatus, now)
+	lastRestartAt := ""
+	if playerStatus.LastRestartAt != nil {
+		lastRestartAt = playerStatus.LastRestartAt.Format(time.RFC3339)
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(StatusResponse{
 		Players: PlayersJSON{
@@ -362,5 +369,16 @@ func StatusByID(w http.ResponseWriter, r *http.Request) {
 		WhitelistEnabled:  playerStatus.WhitelistEnabled,
 		ScheduledShutdown: scheduledShutdown,
 		AgentVersion:      playerStatus.AgentVersion,
+		Health:            health,
+		HealthMessage:     healthMessage,
+		RestartCount:      playerStatus.RestartCount,
+		LastRestartAt:     lastRestartAt,
 	})
+}
+
+func statusHealth(status db.Status, now time.Time) (string, string) {
+	if !status.IsCrashLooping(now) {
+		return "", ""
+	}
+	return "DEGRADED", status.CrashLoopMessage(now)
 }

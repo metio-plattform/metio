@@ -14,5 +14,5 @@ params:path {
 }
 
 docs {
-  Current runtime status reported by the machine-agent (players, uptime, version, RCON).
+  Current runtime status reported by the machine-agent (players, uptime, version, RCON). When the agent observes repeated container restarts without an RCON response, the response includes health: "DEGRADED", healthMessage, restartCount and lastRestartAt.
 }

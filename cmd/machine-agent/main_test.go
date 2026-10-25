@@ -60,9 +60,17 @@ func (m *MockAgentClient) SubmitBackupReport(ctx context.Context, serverID strin
 
 func stubMinecraftServiceRunning(t *testing.T) {
 	t.Helper()
-	oldFunc := getMinecraftServiceRunningFunc
-	getMinecraftServiceRunningFunc = func() (bool, error) { return true, nil }
-	t.Cleanup(func() { getMinecraftServiceRunningFunc = oldFunc })
+	oldContainerFunc := getMinecraftContainerStateFunc
+	oldBootIDFunc := getBootIDFunc
+	startedAt := time.Now().Add(-time.Hour)
+	getMinecraftContainerStateFunc = func() (minecraftContainerState, error) {
+		return minecraftContainerState{Running: true, Status: "running", StartedAt: &startedAt}, nil
+	}
+	getBootIDFunc = func() string { return "test-boot-id" }
+	t.Cleanup(func() {
+		getMinecraftContainerStateFunc = oldContainerFunc
+		getBootIDFunc = oldBootIDFunc
+	})
 }
 
 func TestRunStatusUpdate(t *testing.T) {
@@ -175,40 +183,165 @@ func TestGetMinecraftPlayerCountInvalidOutput(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestGetMinecraftServiceRunning_Running(t *testing.T) {
+func TestGetMinecraftContainerState_Running(t *testing.T) {
 	oldExecCommand := execCommand
 	execCommand = func(name string, args ...string) *exec.Cmd {
-		return exec.Command("echo", "true")
+		return exec.Command("echo", `{"Running":true,"Status":"running","StartedAt":"2026-10-24T12:00:00.123456789Z"}`)
 	}
 	defer func() { execCommand = oldExecCommand }()
 
-	running, err := getMinecraftServiceRunning()
+	state, err := getMinecraftContainerState()
 	assert.NoError(t, err)
-	assert.True(t, running)
+	assert.True(t, state.Running)
+	assert.Equal(t, "running", state.Status)
+	assert.NotNil(t, state.StartedAt)
+	assert.Equal(t, 2026, state.StartedAt.Year())
 }
 
-func TestGetMinecraftServiceRunning_Stopped(t *testing.T) {
-	oldExecCommand := execCommand
-	execCommand = func(name string, args ...string) *exec.Cmd {
-		return exec.Command("echo", "false")
-	}
-	defer func() { execCommand = oldExecCommand }()
-
-	running, err := getMinecraftServiceRunning()
-	assert.NoError(t, err)
-	assert.False(t, running)
-}
-
-func TestGetMinecraftServiceRunning_Error(t *testing.T) {
+func TestGetMinecraftContainerState_Missing(t *testing.T) {
 	oldExecCommand := execCommand
 	execCommand = func(name string, args ...string) *exec.Cmd {
 		return exec.Command("sh", "-c", "exit 1")
 	}
 	defer func() { execCommand = oldExecCommand }()
 
-	running, err := getMinecraftServiceRunning()
+	state, err := getMinecraftContainerState()
+	assert.NoError(t, err)
+	assert.False(t, state.Running)
+	assert.Equal(t, "missing", state.Status)
+	assert.Nil(t, state.StartedAt)
+}
+
+func TestGetMinecraftContainerState_InvalidJSON(t *testing.T) {
+	oldExecCommand := execCommand
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		return exec.Command("echo", "not json")
+	}
+	defer func() { execCommand = oldExecCommand }()
+
+	state, err := getMinecraftContainerState()
 	assert.Error(t, err)
-	assert.False(t, running)
+	assert.False(t, state.Running)
+	assert.Equal(t, "unknown", state.Status)
+}
+
+func testRestartNow() time.Time {
+	return time.Date(2026, 10, 24, 12, 2, 0, 0, time.UTC)
+}
+
+func TestTrackRestart_FirstObservation(t *testing.T) {
+	startedAt := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	status := dbtypes.Status{}
+
+	trackRestart(&status, minecraftContainerState{Running: true, Status: "running", StartedAt: &startedAt}, "boot-1", dbtypes.ServerStateRunning, testRestartNow())
+
+	assert.Equal(t, "boot-1", status.BootID)
+	assert.Equal(t, "running", status.ContainerState)
+	assert.Equal(t, 0, status.RestartCount)
+	assert.Nil(t, status.LastRestartAt)
+	assert.NotNil(t, status.ContainerStartedAt)
+	assert.True(t, startedAt.Equal(*status.ContainerStartedAt))
+}
+
+func TestTrackRestart_DetectsNewContainer(t *testing.T) {
+	oldStart := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	newStart := oldStart.Add(time.Minute)
+	status := dbtypes.Status{
+		BootID:             "boot-1",
+		ContainerStartedAt: &oldStart,
+		RestartCount:       1,
+	}
+
+	trackRestart(&status, minecraftContainerState{Running: true, Status: "running", StartedAt: &newStart}, "boot-1", dbtypes.ServerStateRunning, testRestartNow())
+
+	assert.Equal(t, 2, status.RestartCount)
+	assert.NotNil(t, status.LastRestartAt)
+	assert.True(t, newStart.Equal(*status.LastRestartAt))
+	assert.True(t, newStart.Equal(*status.ContainerStartedAt))
+}
+
+func TestTrackRestart_SameContainerDoesNotIncrement(t *testing.T) {
+	startedAt := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	status := dbtypes.Status{
+		BootID:             "boot-1",
+		ContainerStartedAt: &startedAt,
+		RestartCount:       3,
+	}
+
+	trackRestart(&status, minecraftContainerState{Running: true, Status: "running", StartedAt: &startedAt}, "boot-1", dbtypes.ServerStateRunning, testRestartNow())
+
+	assert.Equal(t, 3, status.RestartCount)
+}
+
+func TestTrackRestart_OldRestartsReset(t *testing.T) {
+	startedAt := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	lastRestart := startedAt
+	status := dbtypes.Status{
+		BootID:             "boot-1",
+		ContainerStartedAt: &startedAt,
+		RestartCount:       4,
+		LastRestartAt:      &lastRestart,
+	}
+
+	trackRestart(
+		&status,
+		minecraftContainerState{Running: true, Status: "running", StartedAt: &startedAt},
+		"boot-1",
+		dbtypes.ServerStateRunning,
+		testRestartNow().Add(10*time.Minute),
+	)
+
+	assert.Equal(t, 0, status.RestartCount)
+	assert.Nil(t, status.LastRestartAt)
+}
+
+func TestTrackRestart_NewBootResets(t *testing.T) {
+	startedAt := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	lastRestart := startedAt.Add(time.Minute)
+	status := dbtypes.Status{
+		BootID:             "boot-1",
+		ContainerStartedAt: &startedAt,
+		RestartCount:       3,
+		LastRestartAt:      &lastRestart,
+	}
+
+	trackRestart(&status, minecraftContainerState{Running: true, Status: "running", StartedAt: &startedAt}, "boot-2", dbtypes.ServerStateRunning, testRestartNow())
+
+	assert.Equal(t, "boot-2", status.BootID)
+	assert.Equal(t, 0, status.RestartCount)
+	assert.Nil(t, status.LastRestartAt)
+}
+
+func TestTrackRestart_ManualStartResets(t *testing.T) {
+	oldStart := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	newStart := oldStart.Add(time.Minute)
+	lastRestart := oldStart.Add(30 * time.Second)
+	status := dbtypes.Status{
+		BootID:             "boot-1",
+		ContainerStartedAt: &oldStart,
+		RestartCount:       3,
+		LastRestartAt:      &lastRestart,
+	}
+
+	trackRestart(&status, minecraftContainerState{Running: true, Status: "running", StartedAt: &newStart}, "boot-1", dbtypes.ServerStateStarting, testRestartNow())
+
+	assert.Equal(t, 0, status.RestartCount)
+	assert.Nil(t, status.LastRestartAt)
+}
+
+func TestTrackRestart_MissingContainerPreservesCount(t *testing.T) {
+	startedAt := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	status := dbtypes.Status{
+		BootID:             "boot-1",
+		ContainerStartedAt: &startedAt,
+		RestartCount:       2,
+	}
+
+	trackRestart(&status, minecraftContainerState{Status: "missing"}, "boot-1", dbtypes.ServerStateRunning, testRestartNow())
+
+	assert.Equal(t, 2, status.RestartCount)
+	assert.Equal(t, "missing", status.ContainerState)
+	assert.NotNil(t, status.ContainerStartedAt)
 }
 
 func TestGetUptime(t *testing.T) {
@@ -1590,9 +1723,16 @@ func TestRunStatusUpdate_VersionWithRawOutput(t *testing.T) {
 
 func TestRunStatusUpdate_ContainerNotRunning(t *testing.T) {
 	mockClient := new(MockAgentClient)
-	oldRunningFunc := getMinecraftServiceRunningFunc
-	getMinecraftServiceRunningFunc = func() (bool, error) { return false, nil }
-	defer func() { getMinecraftServiceRunningFunc = oldRunningFunc }()
+	oldContainerFunc := getMinecraftContainerStateFunc
+	oldBootIDFunc := getBootIDFunc
+	getMinecraftContainerStateFunc = func() (minecraftContainerState, error) {
+		return minecraftContainerState{Status: "missing"}, nil
+	}
+	getBootIDFunc = func() string { return "test-boot-id" }
+	defer func() {
+		getMinecraftContainerStateFunc = oldContainerFunc
+		getBootIDFunc = oldBootIDFunc
+	}()
 
 	oldCheck := checkScheduledShutdownFunc
 	checkScheduledShutdownFunc = func(ctx context.Context, client agentclient.AgentClient, instanceName string) error { return nil }
@@ -1635,9 +1775,16 @@ func TestRunStatusUpdate_ContainerNotRunning(t *testing.T) {
 
 func TestRunStatusUpdate_ContainerCheckError(t *testing.T) {
 	mockClient := new(MockAgentClient)
-	oldRunningFunc := getMinecraftServiceRunningFunc
-	getMinecraftServiceRunningFunc = func() (bool, error) { return false, fmt.Errorf("docker inspect failed") }
-	defer func() { getMinecraftServiceRunningFunc = oldRunningFunc }()
+	oldContainerFunc := getMinecraftContainerStateFunc
+	oldBootIDFunc := getBootIDFunc
+	getMinecraftContainerStateFunc = func() (minecraftContainerState, error) {
+		return minecraftContainerState{Status: "unknown"}, fmt.Errorf("docker inspect failed")
+	}
+	getBootIDFunc = func() string { return "test-boot-id" }
+	defer func() {
+		getMinecraftContainerStateFunc = oldContainerFunc
+		getBootIDFunc = oldBootIDFunc
+	}()
 
 	oldCheck := checkScheduledShutdownFunc
 	checkScheduledShutdownFunc = func(ctx context.Context, client agentclient.AgentClient, instanceName string) error { return nil }

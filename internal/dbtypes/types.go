@@ -1,6 +1,9 @@
 package dbtypes
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type ServerState string
 
@@ -45,6 +48,56 @@ type Status struct {
 	PendingCommandArgs   map[string]string `json:"pending_command_args,omitempty"`
 	PendingCommandResult string            `json:"pending_command_result,omitempty"`
 	AgentVersion         string            `json:"agent_version,omitempty"`
+
+	// The machine-agent cannot reach the host's systemd from its container, so
+	// restart detection is based on the Docker container identity. The agent
+	// compares StartedAt with the previous status document and persists the
+	// observed count across its own restarts. BootID resets the counter when
+	// the VM reboots, and explicit STARTING/STOPPING transitions reset it for
+	// intentional lifecycle actions.
+	ContainerState     string     `json:"container_state,omitempty"`
+	ContainerStartedAt *time.Time `json:"container_started_at,omitempty"`
+	RestartCount       int        `json:"restart_count,omitempty"`
+	LastRestartAt      *time.Time `json:"last_restart_at,omitempty"`
+	BootID             string     `json:"boot_id,omitempty"`
+}
+
+const (
+	// CrashLoopRestartThreshold is the number of observed container restarts
+	// that, combined with an unanswered RCON, indicates a crash loop rather
+	// than a one-off restart.
+	CrashLoopRestartThreshold = 2
+	// CrashLoopWindow keeps old restarts from keeping a server marked as
+	// degraded forever.
+	CrashLoopWindow = 5 * time.Minute
+)
+
+// IsCrashLooping reports whether the status is consistent with a server whose
+// container keeps restarting without ever becoming reachable over RCON.
+func (s Status) IsCrashLooping(now time.Time) bool {
+	if s.RestartCount < CrashLoopRestartThreshold || s.LastRestartAt == nil {
+		return false
+	}
+	if now.Sub(*s.LastRestartAt) > CrashLoopWindow {
+		return false
+	}
+	if s.Players.Max > 0 {
+		return false
+	}
+	return s.Version == "" || s.Version == "Unknown"
+}
+
+// CrashLoopMessage returns the user-facing warning for a crash-looping server,
+// or an empty string when the status is healthy enough.
+func (s Status) CrashLoopMessage(now time.Time) string {
+	if !s.IsCrashLooping(now) {
+		return ""
+	}
+	return fmt.Sprintf(
+		"Minecraft restarted %d times in the last %d minutes and has not answered RCON. The server is probably crash-looping; check the server log.",
+		s.RestartCount,
+		int(CrashLoopWindow.Minutes()),
+	)
 }
 
 type WhitelistEntry struct {

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -518,6 +519,15 @@ func hasProvisioningStep(status db.ProvisioningStatus, name string, state db.Pro
 	return false
 }
 
+func hasProvisioningStepMessage(status db.ProvisioningStatus, name string, state db.ProvisioningState, message string) bool {
+	for _, step := range status.Steps {
+		if step.Name == name && step.Status == state && strings.Contains(step.Message, message) {
+			return true
+		}
+	}
+	return false
+}
+
 // recordProvisioningStatuses stubs UpdateProvisioningStatus and returns a
 // recorder for asserting on the persisted steps.
 func recordProvisioningStatuses(mockDB *MockDB, serverID string) *statusRecorder {
@@ -628,6 +638,9 @@ func TestCreateServer_WithModpack_InstallTimeoutIsNotFatal(t *testing.T) {
 		return s.State == db.ProvisioningStateCompleted &&
 			hasProvisioningStep(s, stepInstallModpack, db.ProvisioningStateCompleted)
 	}), "expected the create to complete despite the install wait timing out")
+	assert.True(t, recorder.any(func(s db.ProvisioningStatus) bool {
+		return hasProvisioningStepMessage(s, stepInstallModpack, db.ProvisioningStateCompleted, "Not confirmed")
+	}), "expected the timed-out install to carry a warning message")
 }
 
 // prepareRecreateMocks sets up the mocks shared by the recreate path.

@@ -111,6 +111,10 @@ export interface StatusResponse {
   whitelistEnabled?: boolean;
   scheduledShutdown?: string;
   agentVersion?: string;
+  health?: 'DEGRADED';
+  healthMessage?: string;
+  restartCount?: number;
+  lastRestartAt?: string;
 }
 
 /**
