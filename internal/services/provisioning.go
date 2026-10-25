@@ -691,6 +691,9 @@ func (s *ProvisioningService) waitForModpackInstall(ctx context.Context, status 
 			return s.handleError(status, ctx, serverID, stepInstallModpack, err)
 		}
 		log.Printf("Warning: modpack install for server %s not confirmed: %v", serverID, err)
+		s.completeStepWithMessage(ctx, status, serverID, stepInstallModpack,
+			"Not confirmed: the server did not answer RCON. Check the server status and log.")
+		return nil
 	}
 	s.completeStep(ctx, status, serverID, stepInstallModpack)
 
@@ -718,18 +721,22 @@ func (s *ProvisioningService) updateStep(ctx context.Context, status *db.Provisi
 }
 
 func (s *ProvisioningService) completeStep(ctx context.Context, status *db.ProvisioningStatus, serverID, stepName string) {
+	s.completeStepWithMessage(ctx, status, serverID, stepName, "Completed")
+}
+
+func (s *ProvisioningService) completeStepWithMessage(ctx context.Context, status *db.ProvisioningStatus, serverID, stepName, message string) {
 	now := time.Now()
 	for i, step := range status.Steps {
 		if step.Name == stepName {
 			status.Steps[i].Status = db.ProvisioningStateCompleted
-			status.Steps[i].Message = "Completed"
+			status.Steps[i].Message = message
 			status.Steps[i].Timestamp = now
 			break
 		}
 	}
 	status.CurrentStep = stepName
 	s.updateStatus(ctx, serverID, status)
-	log.Printf("[%s] Completed step: %s", serverID, stepName)
+	log.Printf("[%s] Completed step: %s - %s", serverID, stepName, message)
 }
 
 func (s *ProvisioningService) handleError(status *db.ProvisioningStatus, ctx context.Context, serverID, stepName string, err error) error {

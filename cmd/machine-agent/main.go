@@ -29,7 +29,8 @@ var saveAllTimeout = 60 * time.Second
 var getMinecraftPlayerCountFunc = getMinecraftPlayerCount
 var getUptimeFunc = getUptime
 var getMinecraftVersionFunc = getMinecraftVersion
-var getMinecraftServiceRunningFunc = getMinecraftServiceRunning
+var getMinecraftContainerStateFunc = getMinecraftContainerState
+var getBootIDFunc = getBootID
 var osReadFile = os.ReadFile
 var syncWhitelistFunc = syncWhitelist
 var importWhitelistIfEmptyFunc = importWhitelistIfEmpty
@@ -135,12 +136,16 @@ func runStatusUpdate(ctx context.Context, client agentclient.AgentClient, instan
 
 	tracing.RecordDBOperation("status_update")
 
-	serverRunning, err := getMinecraftServiceRunningFunc()
+	containerState, err := getMinecraftContainerStateFunc()
 	if err != nil {
-		span.SetAttributes(attribute.String("error", "get_minecraft_service_running_failed"))
-		log.Printf("Error checking whether minecraft.service is running: %v", err)
+		span.SetAttributes(attribute.String("error", "get_minecraft_container_state_failed"))
+		log.Printf("Error checking minecraft container state: %v", err)
 	}
-	span.SetAttributes(attribute.Bool("minecraft.service.running", serverRunning))
+	serverRunning := containerState.Running
+	span.SetAttributes(
+		attribute.Bool("minecraft.container.running", serverRunning),
+		attribute.String("minecraft.container.status", containerState.Status),
+	)
 
 	var current, max int
 	var uptime, instanceIP string
@@ -202,9 +207,11 @@ func runStatusUpdate(ctx context.Context, client agentclient.AgentClient, instan
 
 	currentStatus, _ := client.GetStatus(ctx)
 
+	now := time.Now()
 	status := currentStatus
+	trackRestart(&status, containerState, getBootIDFunc(), currentStatus.ServerState, now)
 	status.Players = dbtypes.Players{Current: current, Max: max}
-	status.Timestamp = time.Now()
+	status.Timestamp = now
 	status.Uptime = uptime
 	if serverRunning {
 		status.ServerState = dbtypes.ServerStateRunning
@@ -215,6 +222,11 @@ func runStatusUpdate(ctx context.Context, client agentclient.AgentClient, instan
 	status.Version = version
 	status.WhitelistEnabled = whitelistEnabled
 	status.AgentVersion = Version
+
+	span.SetAttributes(
+		attribute.Int("restart.count", status.RestartCount),
+		attribute.String("container.state", status.ContainerState),
+	)
 
 	err = client.UpdateStatus(ctx, status)
 	if err != nil {
@@ -251,13 +263,96 @@ func getMinecraftPlayerCount() (int, int, error) {
 	return current, max, nil
 }
 
-func getMinecraftServiceRunning() (bool, error) {
-	cmd := execCommand("/usr/bin/docker", "inspect", "-f", "{{.State.Running}}", "minecraft.service")
+type minecraftContainerState struct {
+	Running   bool
+	Status    string
+	StartedAt *time.Time
+}
+
+func getMinecraftContainerState() (minecraftContainerState, error) {
+	cmd := execCommand("/usr/bin/docker", "inspect", "--format", "{{json .State}}", "minecraft.service")
 	output, err := cmd.Output()
 	if err != nil {
-		return false, err
+		// The container is absent while systemd is restarting the unit. That is
+		// a normal stopped/restarting state, not an agent error.
+		return minecraftContainerState{Status: "missing"}, nil
 	}
-	return strings.TrimSpace(string(output)) == "true", nil
+
+	var raw struct {
+		Running   bool   `json:"Running"`
+		Status    string `json:"Status"`
+		StartedAt string `json:"StartedAt"`
+	}
+	if err := json.Unmarshal(output, &raw); err != nil {
+		return minecraftContainerState{Status: "unknown"}, fmt.Errorf("parse minecraft container state: %w", err)
+	}
+
+	state := minecraftContainerState{Running: raw.Running, Status: raw.Status}
+	if state.Status == "" {
+		state.Status = "unknown"
+	}
+	if raw.StartedAt != "" {
+		startedAt, err := time.Parse(time.RFC3339Nano, raw.StartedAt)
+		if err != nil {
+			return minecraftContainerState{Status: "unknown"}, fmt.Errorf("parse minecraft container start time: %w", err)
+		}
+		if !startedAt.IsZero() {
+			state.StartedAt = &startedAt
+		}
+	}
+	return state, nil
+}
+
+func getBootID() string {
+	data, err := osReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// trackRestart carries the observed container restart count forward across
+// machine-agent status updates. The agent cannot query the host's systemd
+// counter from its container, so a changed Docker container StartedAt is the
+// signal that the unit restarted. A changed boot id starts a fresh count, and
+// an explicit STARTING/STOPPING transition is treated as intentional.
+func trackRestart(status *dbtypes.Status, container minecraftContainerState, bootID string, previousState dbtypes.ServerState, now time.Time) {
+	previousStartedAt := status.ContainerStartedAt
+
+	if bootID != "" && status.BootID != "" && status.BootID != bootID {
+		status.RestartCount = 0
+		status.LastRestartAt = nil
+		previousStartedAt = nil
+	}
+	if bootID != "" {
+		status.BootID = bootID
+	}
+
+	// Keep the persisted count meaningful: restarts older than the crash-loop
+	// window must not turn a single later restart into a false degraded state.
+	if status.LastRestartAt != nil && now.Sub(*status.LastRestartAt) > dbtypes.CrashLoopWindow {
+		status.RestartCount = 0
+		status.LastRestartAt = nil
+	}
+
+	// The first report from this agent (or an older agent that did not store a
+	// container start time) has previousStartedAt == nil, so it cannot prove a
+	// restart yet. The count from a newer agent generation is preserved.
+	status.ContainerState = container.Status
+
+	if previousState == dbtypes.ServerStateStarting || previousState == dbtypes.ServerStateStopping {
+		status.RestartCount = 0
+		status.LastRestartAt = nil
+	} else if container.StartedAt != nil && previousStartedAt != nil && !container.StartedAt.Equal(*previousStartedAt) {
+		status.RestartCount++
+		lastRestartAt := *container.StartedAt
+		status.LastRestartAt = &lastRestartAt
+	}
+
+	if container.StartedAt != nil {
+		startedAt := *container.StartedAt
+		status.ContainerStartedAt = &startedAt
+	}
 }
 
 func getUptime() (string, error) {

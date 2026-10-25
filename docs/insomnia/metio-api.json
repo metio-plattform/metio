@@ -415,7 +415,7 @@
       "modified": 1743436800000,
       "created": 1743436800000,
       "name": "Get Status",
-      "description": "Current runtime status reported by the machine-agent (players, uptime, version, RCON).",
+      "description": "Current runtime status reported by the machine-agent (players, uptime, version, RCON). When the agent observes repeated container restarts without an RCON response, the response includes `health: \"DEGRADED\"`, `healthMessage`, `restartCount` and `lastRestartAt`.",
       "environment": {},
       "environmentPropertyOrder": null,
       "metaSortKey": -1743436784000,

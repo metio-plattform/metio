@@ -1344,6 +1344,40 @@ func TestStatusByID_Success(t *testing.T) {
 	assert.Equal(t, "1:30", response.Uptime)
 	assert.Equal(t, "1.21.1", response.Version)
 	assert.Equal(t, "10.0.0.1:25565", response.InstanceIP)
+	assert.Empty(t, response.Health)
+	assert.Empty(t, response.HealthMessage)
+}
+
+func TestStatusByID_CrashLoopHealth(t *testing.T) {
+	mockDB := new(testutil.MockDB)
+	cleanup := setupMockDB(mockDB)
+	defer cleanup()
+
+	lastRestartAt := time.Now().Add(-time.Minute)
+	mockDB.On("GetServerConfig", mock.Anything, "srv1").Return(&db.ServerConfig{
+		Name: "test-instance", Region: "us-central1", Zone: "us-central1-a",
+	}, nil)
+	mockDB.On("GetStatus", mock.Anything, "test-instance").Return(db.Status{
+		Players:       db.Players{Current: 0, Max: 0},
+		Timestamp:     time.Now(),
+		ServerState:   db.ServerStateRunning,
+		Version:       "Unknown",
+		RestartCount:  3,
+		LastRestartAt: &lastRestartAt,
+	}, nil)
+
+	req := httptest.NewRequest("GET", "/api/servers/srv1/status", nil)
+	req = mux.SetURLVars(req, map[string]string{"id": "srv1"})
+	w := httptest.NewRecorder()
+	servers.StatusByID(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var response servers.StatusResponse
+	json.Unmarshal(w.Body.Bytes(), &response)
+	assert.Equal(t, "DEGRADED", response.Health)
+	assert.Contains(t, response.HealthMessage, "restarted 3 times")
+	assert.Equal(t, 3, response.RestartCount)
+	assert.Equal(t, lastRestartAt.Format(time.RFC3339), response.LastRestartAt)
 }
 
 func TestStatusByID_NotFound(t *testing.T) {

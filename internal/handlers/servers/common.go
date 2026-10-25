@@ -226,6 +226,10 @@ type StatusResponse struct {
 	WhitelistEnabled  bool        `json:"whitelistEnabled"`
 	ScheduledShutdown *string     `json:"scheduledShutdown,omitempty"`
 	AgentVersion      string      `json:"agentVersion,omitempty"`
+	Health            string      `json:"health,omitempty"`
+	HealthMessage     string      `json:"healthMessage,omitempty"`
+	RestartCount      int         `json:"restartCount,omitempty"`
+	LastRestartAt     string      `json:"lastRestartAt,omitempty"`
 }
 
 type PlayersJSON struct {
