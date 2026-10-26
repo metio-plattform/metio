@@ -5,18 +5,18 @@ module github.com/metio-plattform/metio
 go 1.27
 
 require (
-	cloud.google.com/go/cloudtasks v1.20.0
-	cloud.google.com/go/compute v1.73.0
+	cloud.google.com/go/cloudtasks v1.21.0
+	cloud.google.com/go/compute v1.74.0
 	cloud.google.com/go/compute/metadata v0.10.0
-	cloud.google.com/go/storage v1.69.0
-	github.com/dapr/go-sdk v1.15.0
+	cloud.google.com/go/storage v1.70.0
+	github.com/dapr/go-sdk v1.16.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/handlers v1.5.2
 	github.com/gorilla/mux v1.8.1
 	github.com/gorilla/sessions v1.4.0
 	github.com/pulumi/pulumi-gcp/sdk/v8 v8.41.1
-	github.com/pulumi/pulumi/sdk/v3 v3.269.0
+	github.com/pulumi/pulumi/sdk/v3 v3.272.0
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
 	go.opentelemetry.io/contrib/detectors/gcp v1.47.0
@@ -26,7 +26,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.47.0
 	go.opentelemetry.io/otel/trace v1.47.0
 	golang.org/x/oauth2 v0.37.0
-	google.golang.org/api v0.304.0
+	google.golang.org/api v0.307.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
@@ -35,7 +35,7 @@ require (
 require (
 	cel.dev/expr v0.25.2 // indirect
 	cloud.google.com/go v0.123.0 // indirect
-	cloud.google.com/go/auth v0.24.1-0.20261001053825-dbc26066f70a // indirect
+	cloud.google.com/go/auth v0.24.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.3.0 // indirect
 	cloud.google.com/go/iam v1.12.0 // indirect
 	cloud.google.com/go/longrunning v1.2.0 // indirect
@@ -66,9 +66,9 @@ require (
 	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
-	github.com/dapr/dapr v1.18.0 // indirect
-	github.com/dapr/durabletask-go v0.12.1 // indirect
-	github.com/dapr/kit v0.18.1 // indirect
+	github.com/dapr/dapr v1.19.0 // indirect
+	github.com/dapr/durabletask-go v0.15.1 // indirect
+	github.com/dapr/kit v0.19.0 // indirect
 	github.com/deckarep/golang-set/v2 v2.5.0 // indirect
 	github.com/djherbis/times v1.5.0 // indirect
 	github.com/ebitengine/purego v0.10.2 // indirect
@@ -103,7 +103,7 @@ require (
 	github.com/iwdgo/sigintwindows v0.2.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
-	github.com/klauspost/compress v1.18.7 // indirect
+	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
@@ -171,7 +171,7 @@ require (
 	golang.org/x/tools v0.51.0 // indirect
 	google.golang.org/genproto v0.0.0-20260715232425-e75dac1f907d // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	lukechampine.com/frand v1.4.2 // indirect
 )
