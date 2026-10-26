@@ -1,0 +1,85 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.23.0
+  name: minecraftservers.minecraft.metio.dev
+spec:
+  group: minecraft.metio.dev
+  names:
+    kind: MinecraftServer
+    listKind: MinecraftServerList
+    plural: minecraftservers
+    shortNames:
+    - mcs
+    singular: minecraftserver
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.serverID
+      name: ServerID
+      type: string
+    - jsonPath: .status.ready
+      name: Ready
+      type: boolean
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: MinecraftServer is the Schema for the minecraftservers API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: MinecraftServerSpec defines the desired state of a Minecraft
+              server.
+            properties:
+              diskSizeGB:
+                description: DiskSizeGB is the size of the persistent disk in GB.
+                format: int32
+                minimum: 1
+                type: integer
+              machineType:
+                description: MachineType is the GCP machine type to run the server
+                  on.
+                minLength: 1
+                type: string
+              serverID:
+                description: ServerID is the unique identifier of the server.
+                minLength: 1
+                type: string
+            required:
+            - diskSizeGB
+            - machineType
+            - serverID
+            type: object
+          status:
+            description: MinecraftServerStatus defines the observed state of a Minecraft
+              server.
+            properties:
+              ready:
+                description: Ready indicates whether the server is ready.
+                type: boolean
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
