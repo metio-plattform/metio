@@ -2,7 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-11
-- **Amended:** 2026-09-21 (spike outcome — see "Amendment: Spike outcome")
+- **Amended:** 2026-09-21 (spike outcome — see "Amendment: Spike outcome");
+  2026-10-26 (custom resource naming — see "Amendment: Custom resource naming")
 - **Deciders:** Metio maintainers
 - **Relates to:** ADR-0001 (controller/agent API — extended, not superseded)
 
@@ -277,7 +278,7 @@ longer the fallback for this decision.
 ### Downstream re-assessment
 
 - **#536** — its data-model half proceeds; its cloud-config rendering half becomes a field on the
-  Metio custom resource (build work is now authorised by this amendment).
+  `MinecraftServer` custom resource (build work is now authorised by this amendment).
 - **#538** — destructive-change confirmation on the current runtime stays (until migration); on
   the Kubernetes runtime the "this destroys your VM" warning becomes unnecessary, because
   configuration changes stop replacing machines.
@@ -289,19 +290,21 @@ longer the fallback for this decision.
 
 ### Architecture (as amended)
 
-Metio defines its own Kubernetes API objects, so that the desired state of a server is a
-first-class, declarative resource rather than a rendered cloud-config string.
+Metio defines its own Kubernetes API objects — the `MinecraftServer` custom resource at
+`minecraft.metio.dev/v1alpha1` (see "Amendment: Custom resource naming") — so that the desired
+state of a server is a first-class, declarative resource rather than a rendered cloud-config
+string.
 
 These objects are served by a **single binary, `metio-operator`, hosting two controllers**, in the
 style of `kube-controller-manager`. The existing `cmd/machine-agent/` becomes
 `cmd/metio-operator/`.
 
-- **Sync controller** — reconciles desired state from the controller API into Metio custom
-  resources. It is the **sole writer of Metio custom resources in both modes**, applying them with
-  Server-Side Apply under a single field manager.
-- **Reconcile controller** — reconciles Metio custom resources into Deployments, Services, PVCs
-  and Secrets, and writes `.status`. The sync controller reads that status and reports it back to
-  the controller API.
+- **Sync controller** — reconciles desired state from the controller API into `MinecraftServer`
+  custom resources. It is the **sole writer of `MinecraftServer` custom resources in both modes**,
+  applying them with Server-Side Apply under a single field manager.
+- **Reconcile controller** — reconciles `MinecraftServer` custom resources into Deployments,
+  Services, PVCs and Secrets, and writes `.status`. The sync controller reads that status and
+  reports it back to the controller API.
 
 **The custom resource is the seam.** Neither controller knows the other exists: the sync
 controller's only job is to make the resource match the controller API, and the reconcile
@@ -475,7 +478,7 @@ Standalone mode only, for an engineer familiar with both this codebase and Kuber
 |---|---|
 | k3s-on-COS spike and cloud-config bootstrap | ~1 week — **done** (SP1-SP6; estimate held) |
 | CRD and operator reconcile into Deployment, PVC, Service | ~1 week |
-| Agent rewrite: desired state to Metio objects; domain logic via exec API | ~1 week |
+| Agent rewrite: desired state to `MinecraftServer` objects; domain logic via exec API | ~1 week |
 | Backup and restore as sidecar plus init container | ~1 week |
 | **Working prototype** | **≈ 4 weeks** |
 | Test rewrite, documentation, hardening | +2-6 weeks |
@@ -600,3 +603,20 @@ multi-server destination that the ADR deferred.
   evaluation time. Any Autopilot plan carries that tail risk.
 - If the DNS-tracking address model is adopted, DNS is on the critical path of server discovery
   and must update on node churn.
+
+## Amendment: Custom resource naming (2026-10-26)
+
+The custom resource introduced in the Architecture section is named
+**`MinecraftServer`** (plural `minecraftservers`, short name `mcs`), served at
+`minecraft.metio.dev/v1alpha1`. It is namespace-scoped.
+
+The group carries the product name (`minecraftservers.minecraft.metio.dev`) rather than reusing
+`metio.dev`, so the kind cannot be mistaken for a Metio control-plane object in a shared cluster,
+and so future kinds (`MinecraftBackup`, `MinecraftWorld`) fit the same group.
+
+In standalone mode the operator, the `MinecraftServer` and every child object (Deployment, PVC,
+Service, Secret) share a single `metio` namespace. That keeps the operator on a namespaced `Role`
+with no cluster-scoped write access, and because the CRD is namespace-scoped, cluster mode can
+later move to one namespace per server without an API change. Children must always live in the
+CR's namespace: ownerReferences are namespace-local, so cross-namespace garbage collection would
+silently not happen.
