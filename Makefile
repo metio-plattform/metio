@@ -26,11 +26,17 @@ test-backend: build-web
 	go tool cover -html=build/coverage.out -o build/coverage.html
 	@echo "Coverage report generated at build/coverage.html"
 
-# Run Go verification (tidy, verify, fmt, vet)
+# Run Go verification (tidy, verify, format, vet)
 verify-backend: build-web
-	go mod tidy
+	go mod tidy -diff
 	go mod verify
-	go fmt ./...
+	@files="$$(gofmt -l $$(git ls-files '*.go'))"; \
+	if [ -n "$$files" ]; then \
+		echo "The following files are not gofmt-formatted:"; \
+		echo "$$files"; \
+		echo "Run 'gofmt -w' on them."; \
+		exit 1; \
+	fi
 	go vet ./...
 
 # Install frontend dependencies
