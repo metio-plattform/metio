@@ -26,3 +26,10 @@ repos:
     rev: v0.10.0.1
     hooks:
     -   id: shellcheck
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -w
+        language: system
+        types: [go]

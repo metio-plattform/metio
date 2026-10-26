@@ -1,4 +1,5 @@
 name: CI
+
 on:
   push:
     branches: [main]
@@ -10,22 +11,75 @@ on:
     types: [checks_requested]
     branches: [main]
 
+# Cancel superseded PR runs. Merge-group runs are never cancelled: doing so
+# leaves the queue entry stuck (#600).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test:
+  # Decides which expensive jobs are worth running. Gated jobs also run when
+  # this job fails, so a broken filter can never silently skip a check.
+  changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      deploy: ${{ steps.filter.outputs.deploy }}
+      images: ${{ steps.filter.outputs.images }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # merge_group diffs base_sha..head_sha; both must be fetched.
+          fetch-depth: 0
+      - id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          base: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || github.sha }}
+          filters: |
+            code:
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'web/**'
+              - 'static/**'
+              - '.github/workflows/**'
+            deploy:
+              - 'deploy/**'
+            images:
+              - '**/Dockerfile'
+              - 'web/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/**'
+
+  test:
+    needs: changes
+    if: "!cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.code == 'true')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version: '1.27'
+          cache-dependency-path: go.sum
       - uses: actions/setup-node@v7
         with:
           node-version: '25'
-      - run: make verify-backend test-backend
-      - run: make build-web test-web lint-web
+          # Without an explicit cache npm ci downloads the tree on every run.
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # One make invocation so install-web/build-web run once instead of once
+      # per target (#651).
+      - run: make build-web verify-backend test lint-web
 
   tofu:
+    needs: changes
+    if: "!cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.deploy == 'true')"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: opentofu/setup-opentofu@v2
@@ -36,36 +90,57 @@ jobs:
       - run: tofu -chdir=deploy validate
 
   docker:
-    # Runs even when the release job is skipped (PRs, no new release) —
-    # only tests must have passed. IMAGE_VERSION carries the release-please
-    # version on release builds so it is baked into the binaries via ldflags.
-    needs: [test, release]
-    if: always() && !cancelled() && needs.test.result == 'success'
-    env:
-      IMAGE_VERSION: ${{ needs.release.outputs.release_created == 'true' && needs.release.outputs.version || 'local' }}
+    # Runs in parallel with `test` (it does not consume its output) and is
+    # skipped for docs-only changes. It must also run when a release was cut:
+    # release-please uses `release-type: simple`, so its merge only touches
+    # CHANGELOG.md/version.txt, does not match the `images` filter, and would
+    # otherwise leave promote-images without images to promote.
+    needs: [changes, release]
+    if: "!cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.images == 'true' || needs.release.outputs.release_created == 'true')"
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [controller, machine-agent, mc-backup, daprd]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
+    env:
+      # IMAGE_VERSION carries the release-please version on release builds so it
+      # is baked into the binaries via ldflags.
+      IMAGE_VERSION: ${{ needs.release.outputs.release_created == 'true' && needs.release.outputs.version || 'local' }}
     steps:
       - uses: actions/checkout@v7
-      - name: Resolve image tag
-        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-      - run: echo "${{ github.token }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - run: make ci-controller-image VERSION=$IMAGE_VERSION IMAGE_TAG=$IMAGE_TAG
-      - run: make ci-machine-agent-image VERSION=$IMAGE_VERSION IMAGE_TAG=$IMAGE_TAG
-      - run: make ci-mc-backup-image VERSION=$IMAGE_VERSION IMAGE_TAG=$IMAGE_TAG
-      - run: make ci-daprd-image VERSION=$IMAGE_VERSION IMAGE_TAG=$IMAGE_TAG
-      - if: github.ref == 'refs/heads/main'
-        run: make push-images IMAGE_TAG=$IMAGE_TAG
+      - name: Resolve short image tag
+        id: tag
+        run: echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - name: Log in to ghcr.io
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: cmd/${{ matrix.image }}/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.image }}:${{ steps.tag.outputs.value }}
+          build-args: VERSION=${{ env.IMAGE_VERSION }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=min,scope=${{ matrix.image }}
 
   release:
-    # Release Please runs before the image build so the computed version can be
-    # injected at build time instead of only retagging afterwards (#422).
+    # No longer waits for `test`: main can only change through the merge queue,
+    # which already ran the suite on this tree (the ruleset has no bypass actors).
     if: github.ref == 'refs/heads/main'
-    needs: [test]
     environment: main
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
       pull-requests: write
@@ -84,6 +159,7 @@ jobs:
     needs: [docker, release]
     environment: main
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       packages: write

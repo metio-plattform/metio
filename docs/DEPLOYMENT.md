@@ -706,8 +706,12 @@ to new/updated servers.
 
 Metio includes GitHub Actions CI/CD (`.github/workflows/ci.yml`) for automated builds:
 
-1. The workflow runs tests (Go + frontend) on every push and PR to `main`
-2. On `main` merges, it builds and pushes Docker images to `ghcr.io/metio-plattform/metio`
+1. Pull requests run the test suite and build the container images; both are
+   skipped when only non-code paths change. The merge queue re-runs the same
+   suite on the merged tree and is the authoritative gate.
+2. On `main` merges, images are built and pushed to `ghcr.io/metio-plattform/metio`
+   when code changed or a release was cut. Tests are not re-run after merge,
+   because nothing can reach `main` without passing the merge queue.
 3. Images are tagged with the git SHA
 4. Use `make promote FROM=<sha> TO=main` to retag images for deployment
 
