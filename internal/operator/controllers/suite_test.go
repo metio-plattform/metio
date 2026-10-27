@@ -84,9 +84,8 @@ var _ = Describe("MinecraftServer", func() {
 				Namespace: "default",
 			},
 			Spec: metiov1alpha1.MinecraftServerSpec{
-				ServerID:    "srv-1",
-				MachineType: "e2-medium",
-				DiskSizeGB:  10,
+				ServerID:         "srv-1",
+				MinecraftVersion: "1.21.1",
 			},
 		}
 		Expect(k8sClient.Create(ctx, ms)).To(Succeed())
@@ -97,7 +96,7 @@ var _ = Describe("MinecraftServer", func() {
 			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(ms), got); err != nil {
 				return err
 			}
-			got.Spec.DiskSizeGB = 20
+			got.Spec.MinecraftVersion = "1.21.4"
 			return k8sClient.Update(ctx, got)
 		}, time.Second*5, time.Millisecond*250).Should(Succeed())
 
@@ -108,6 +107,75 @@ var _ = Describe("MinecraftServer", func() {
 			err := k8sClient.Get(ctx, client.ObjectKeyFromObject(ms), got)
 			return err != nil
 		}, time.Second*5, time.Millisecond*250).Should(BeTrue())
+	})
+
+	It("rejects an object that sets both minecraftVersion and modpack", func() {
+		ms := &metiov1alpha1.MinecraftServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bad-both",
+				Namespace: "default",
+			},
+			Spec: metiov1alpha1.MinecraftServerSpec{
+				ServerID:         "srv-2",
+				MinecraftVersion: "1.21.1",
+				Modpack: &metiov1alpha1.ModpackConfig{
+					Platform:  "modrinth",
+					ProjectID: "abc123",
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, ms)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("rejects an object that sets neither minecraftVersion nor modpack", func() {
+		ms := &metiov1alpha1.MinecraftServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bad-neither",
+				Namespace: "default",
+			},
+			Spec: metiov1alpha1.MinecraftServerSpec{
+				ServerID: "srv-3",
+			},
+		}
+		err := k8sClient.Create(ctx, ms)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("rejects a shutdown schedule enabled without a time", func() {
+		ms := &metiov1alpha1.MinecraftServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "bad-shutdown",
+				Namespace: "default",
+			},
+			Spec: metiov1alpha1.MinecraftServerSpec{
+				ServerID:         "srv-4",
+				MinecraftVersion: "1.21.1",
+				ShutdownSchedule: &metiov1alpha1.ShutdownSchedule{
+					Enabled: true,
+				},
+			},
+		}
+		err := k8sClient.Create(ctx, ms)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("accepts a valid modpack server", func() {
+		ms := &metiov1alpha1.MinecraftServer{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pack-server",
+				Namespace: "default",
+			},
+			Spec: metiov1alpha1.MinecraftServerSpec{
+				ServerID: "srv-5",
+				Modpack: &metiov1alpha1.ModpackConfig{
+					Platform:  "modrinth",
+					ProjectID: "abc123",
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, ms)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, ms)).To(Succeed())
 	})
 })
 
