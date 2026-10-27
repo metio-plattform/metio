@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0](https://github.com/metio-plattform/metio/compare/v2.2.0...v2.3.0) (2026-10-27)
+
+
+### Features
+
+* define the MinecraftServer CRD and operator scaffold ([#568](https://github.com/metio-plattform/metio/issues/568)) ([#654](https://github.com/metio-plattform/metio/issues/654)) ([4d138d4](https://github.com/metio-plattform/metio/commit/4d138d41e95bb502cf47c6e6aa2db84897958981))
+* sync controller reconciles controller API to MinecraftServer resources ([#569](https://github.com/metio-plattform/metio/issues/569)) ([#656](https://github.com/metio-plattform/metio/issues/656)) ([7e2857b](https://github.com/metio-plattform/metio/commit/7e2857bdcca8a87caa6e0c24de0c9602b1038f18))
+
 ## [2.2.0](https://github.com/nbyl/metio/compare/v2.1.0...v2.2.0) (2026-10-16)
 
 
