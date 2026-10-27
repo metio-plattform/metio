@@ -1,4 +1,4 @@
-.PHONY: all build clean build-images codespace-setup deploy deploy-full deploy-infrastructure deploy-machine-agent deploy-controller check-images use-default-images cleanup-old-images install-web build-web test test-backend test-web develop opencode-web lint-web verify-backend ci-controller-image ci-machine-agent-image ci-mc-backup-image ci-daprd-image controller-image machine-agent-image mc-backup-image daprd-image push-images promote promote-distribution help dev-up dev-down dev-dapr-setup test-dapr-integration
+.PHONY: all build clean build-images codespace-setup deploy deploy-full deploy-infrastructure deploy-machine-agent deploy-controller check-images use-default-images cleanup-old-images install-web build-web test test-backend test-web develop opencode-web lint-web verify-backend generate ci-controller-image ci-machine-agent-image ci-mc-backup-image ci-daprd-image ci-metio-operator-image controller-image machine-agent-image mc-backup-image daprd-image metio-operator-image push-images promote promote-distribution help dev-up dev-down dev-dapr-setup test-dapr-integration
 
 USERNAME := $(shell whoami)
 
@@ -18,6 +18,10 @@ build: build-web
 		fi; \
 	done
 	@echo "All binaries built successfully"
+
+# Generate code (DeepCopy, CRDs, etc.)
+generate:
+	go generate ./...
 
 # Run Go tests with coverage
 test-backend: build-web
@@ -261,6 +265,14 @@ ci-daprd-image:
 	echo "Building daprd image for CI: ghcr.io/$${ORG}/$${REPO}/daprd:$${SHA}"; \
 	docker buildx build --platform linux/amd64 -t ghcr.io/$${ORG}/$${REPO}/daprd:$${SHA} -f cmd/daprd/Dockerfile --load .
 
+# CI metio-operator image build — tag for ghcr.io, load into local daemon (no push)
+ci-metio-operator-image:
+	@mkdir -p build; SHA=$(IMAGE_TAG); \
+	if [ -f build/registry.env ]; then . build/registry.env; fi; \
+	ORG=$${GITHUB_ORG:-metio-plattform}; REPO=$${GITHUB_REPO:-metio}; \
+	echo "Building metio-operator image for CI: ghcr.io/$${ORG}/$${REPO}/metio-operator:$${SHA}"; \
+	docker buildx build --platform linux/amd64 -t ghcr.io/$${ORG}/$${REPO}/metio-operator:$${SHA} --build-arg VERSION=$(VERSION) -f cmd/metio-operator/Dockerfile --load .
+
 # Local controller image build + push to Artifact Registry
 controller-image:
 	@mkdir -p build
@@ -304,6 +316,17 @@ daprd-image:
 	echo "Building daprd image: $${IMAGE}"; \
 	docker buildx build --platform linux/amd64 -f cmd/daprd/Dockerfile -t $${IMAGE} --push . && \
 	echo "$${IMAGE}" > build/daprd-image.txt
+
+# Local metio-operator image build + push to Artifact Registry
+metio-operator-image:
+	@mkdir -p build
+	@SHA=$(IMAGE_TAG); \
+	if [ -f build/registry.env ]; then . build/registry.env; else ./tools/generate-config.sh >/dev/null 2>&1 || true; . build/registry.env 2>/dev/null || true; fi; \
+	REG_PROJ=$${GCP_ARTIFACT_REGISTRY_PROJECT:-minecraftbyl}; REG_LOC=$${GCP_ARTIFACT_REGISTRY_LOCATION:-europe-west3}; REG_REPO=$${GCP_ARTIFACT_REGISTRY_REPO:-metio}; \
+	IMAGE="$$REG_LOC-docker.pkg.dev/$$REG_PROJ/$$REG_REPO/metio-operator:$${SHA}"; \
+	echo "Building metio-operator image: $${IMAGE}"; \
+	docker buildx build --platform linux/amd64 -f cmd/metio-operator/Dockerfile -t $${IMAGE} --build-arg VERSION=$(VERSION) --push . && \
+	echo "$${IMAGE}" > build/metio-operator-image.txt
 
 # Push images to ghcr.io
 push-images:
