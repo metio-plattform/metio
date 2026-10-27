@@ -66,8 +66,15 @@ func (b *BackupConfig) IsValid() error {
 	return nil
 }
 
+// Runtime constants describe where a server is executed.
+const (
+	RuntimeDocker     = "docker"
+	RuntimeKubernetes = "kubernetes"
+)
+
 type ServerConfig struct {
 	ID                          string            `json:"-"`
+	Runtime                     string            `json:"runtime,omitempty"`
 	Name                        string            `json:"name"`
 	Region                      string            `json:"region"`
 	Zone                        string            `json:"zone"`

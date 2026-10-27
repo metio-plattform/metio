@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -15,6 +16,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	metiov1alpha1 "github.com/metio-plattform/metio/internal/operator/api/v1alpha1"
+	"github.com/metio-plattform/metio/internal/operator/controllerapi"
 	"github.com/metio-plattform/metio/internal/operator/controllers"
 )
 
@@ -52,10 +54,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := (&controllers.SyncReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	controllerClient := controllerapi.New(
+		getEnv("CONTROLLER_URL", "http://localhost:8080"),
+		os.Getenv("CONTROLLER_API_KEY"),
+	)
+	namespace := getEnv("NAMESPACE", "metio")
+	interval := 30 * time.Second
+	if raw := os.Getenv("SYNC_INTERVAL"); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil {
+			interval = d
+		}
+	}
+	syncReconciler := controllers.NewSyncReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+		controllerClient,
+		namespace,
+		interval,
+	)
+	if err := syncReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create sync controller")
 		os.Exit(1)
 	}

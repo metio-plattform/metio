@@ -13,6 +13,7 @@ func RegisterRoutes(api *mux.Router) {
 	s.HandleFunc("/{id}/start", StartServerByID).Methods("POST")
 	s.HandleFunc("/{id}/stop", StopServerByID).Methods("POST")
 	s.HandleFunc("/{id}/status", StatusByID).Methods("GET")
+	s.HandleFunc("/{id}/status", UpdateServerStatus).Methods("PUT")
 	s.HandleFunc("/{id}/whitelist", GetWhitelistByID).Methods("GET")
 	s.HandleFunc("/{id}/whitelist", AddWhitelistByID).Methods("POST")
 	s.HandleFunc("/{id}/whitelist/{uuid}", RemoveWhitelistByID).Methods("DELETE")
