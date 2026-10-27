@@ -19,16 +19,16 @@ import (
 type ServerResponse struct {
 	ID     string `json:"id"`
 	Config struct {
-		Name             string `json:"name"`
-		Region           string `json:"region"`
-		Zone             string `json:"zone"`
-		MachineType      string `json:"machineType"`
-		MinecraftVersion string `json:"minecraftVersion"`
-		DiskSizeGB       int    `json:"diskSizeGB"`
-		Modpack          *db.ModpackConfig `json:"modpack,omitempty"`
-		Backup           *db.BackupConfig  `json:"backup,omitempty"`
+		Name             string               `json:"name"`
+		Region           string               `json:"region"`
+		Zone             string               `json:"zone"`
+		MachineType      string               `json:"machineType"`
+		MinecraftVersion string               `json:"minecraftVersion"`
+		DiskSizeGB       int                  `json:"diskSizeGB"`
+		Modpack          *db.ModpackConfig    `json:"modpack,omitempty"`
+		Backup           *db.BackupConfig     `json:"backup,omitempty"`
 		ShutdownSchedule *db.ShutdownSchedule `json:"shutdownSchedule,omitempty"`
-		Runtime          string `json:"runtime,omitempty"`
+		Runtime          string               `json:"runtime,omitempty"`
 	} `json:"config"`
 	Status *db.Status `json:"status,omitempty"`
 }
@@ -124,4 +124,3 @@ func (c *client) UpdateServerStatus(ctx context.Context, id string, status db.St
 	}
 	return nil
 }
-
