@@ -102,10 +102,26 @@ type MinecraftServerSpec struct {
 	Whitelist *WhitelistConfig `json:"whitelist,omitempty"`
 }
 
+// +kubebuilder:object:generate=true
+// MinecraftServerPlayers holds player counts reported in status.
+type MinecraftServerPlayers struct {
+	Current int `json:"current,omitempty"`
+	Max     int `json:"max,omitempty"`
+}
+
 // MinecraftServerStatus defines the observed state of a Minecraft server.
 type MinecraftServerStatus struct {
 	// Ready indicates whether the server is ready.
 	Ready bool `json:"ready,omitempty"`
+
+	// State is the server state reported by the reconcile controller.
+	State string `json:"state,omitempty"`
+
+	// Players holds current/max player counts.
+	Players MinecraftServerPlayers `json:"players,omitempty"`
+
+	// Version is the Minecraft version running.
+	Version string `json:"version,omitempty"`
 }
 
 // +kubebuilder:object:root=true

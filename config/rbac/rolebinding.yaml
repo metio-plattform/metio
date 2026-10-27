@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: metio-operator
+  namespace: metio
+subjects:
+- kind: ServiceAccount
+  name: metio-operator
+  namespace: metio
+roleRef:
+  kind: Role
+  name: metio-operator
+  apiGroup: rbac.authorization.k8s.io

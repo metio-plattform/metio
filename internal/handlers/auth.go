@@ -154,6 +154,14 @@ func apiAuthMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
+		// Operator API key bypass (only active when OPERATOR_API_KEY is configured)
+		if opKey := viper.GetString("OPERATOR_API_KEY"); opKey != "" {
+			if r.Header.Get("Authorization") == "Bearer "+opKey {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
 		if !isUserAuthenticated(r) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)

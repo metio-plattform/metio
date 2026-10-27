@@ -156,9 +156,23 @@ spec:
             description: MinecraftServerStatus defines the observed state of a Minecraft
               server.
             properties:
+              players:
+                description: Players holds current/max player counts.
+                properties:
+                  current:
+                    type: integer
+                  max:
+                    type: integer
+                type: object
               ready:
                 description: Ready indicates whether the server is ready.
                 type: boolean
+              state:
+                description: State is the server state reported by the reconcile controller.
+                type: string
+              version:
+                description: Version is the Minecraft version running.
+                type: string
             type: object
         required:
         - spec

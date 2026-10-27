@@ -1,0 +1,15 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: metio-operator
+  namespace: metio
+rules:
+- apiGroups: ["minecraft.metio.dev"]
+  resources: ["minecraftservers"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["minecraft.metio.dev"]
+  resources: ["minecraftservers/status"]
+  verbs: ["get", "update", "patch"]
+- apiGroups: ["minecraft.metio.dev"]
+  resources: ["minecraftservers/finalizers"]
+  verbs: ["update"]
