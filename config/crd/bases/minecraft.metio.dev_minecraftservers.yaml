@@ -117,7 +117,7 @@ spec:
                 type: object
                 x-kubernetes-validations:
                 - message: time is required when enabled
-                  rule: '!self.enabled || self.time != '''''
+                  rule: '!self.enabled || size(self.time) > 0'
               whitelist:
                 description: Whitelist controls the server whitelist.
                 properties:
@@ -151,7 +151,7 @@ spec:
             x-kubernetes-validations:
             - message: exactly one of minecraftVersion or modpack must be set
               rule: (has(self.modpack) && !has(self.minecraftVersion)) || (!has(self.modpack)
-                && has(self.minecraftVersion) && self.minecraftVersion != '')
+                && has(self.minecraftVersion) && size(self.minecraftVersion) > 0)
           status:
             description: MinecraftServerStatus defines the observed state of a Minecraft
               server.

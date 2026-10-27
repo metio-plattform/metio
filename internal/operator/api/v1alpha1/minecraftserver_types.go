@@ -47,7 +47,7 @@ type BackupConfig struct {
 
 // +kubebuilder:object:generate=true
 // ShutdownSchedule describes a recurring daily shutdown time in UTC.
-// +kubebuilder:validation:XValidation:rule="!self.enabled || self.time != ''",message="time is required when enabled"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || size(self.time) > 0",message="time is required when enabled"
 type ShutdownSchedule struct {
 	// Enabled controls whether the shutdown schedule is active.
 	Enabled bool `json:"enabled"`
@@ -80,7 +80,7 @@ type WhitelistEntry struct {
 
 // +kubebuilder:object:generate=true
 // MinecraftServerSpec defines the desired state of a Minecraft server.
-// +kubebuilder:validation:XValidation:rule="(has(self.modpack) && !has(self.minecraftVersion)) || (!has(self.modpack) && has(self.minecraftVersion) && self.minecraftVersion != '')",message="exactly one of minecraftVersion or modpack must be set"
+// +kubebuilder:validation:XValidation:rule="(has(self.modpack) && !has(self.minecraftVersion)) || (!has(self.modpack) && has(self.minecraftVersion) && size(self.minecraftVersion) > 0)",message="exactly one of minecraftVersion or modpack must be set"
 type MinecraftServerSpec struct {
 	// ServerID is the unique identifier of the server.
 	// +kubebuilder:validation:MinLength=1
